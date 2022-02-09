@@ -1,0 +1,7 @@
+ipython
+sphinx-automodapi
+numpy
+matplotlib
+mpdaf
+lmfit
+astropy
