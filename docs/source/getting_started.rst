@@ -17,6 +17,17 @@ necessary. If you are still attempting to use a jupyter notebook
 and notice the figures are not behaving as you would expect, then
 please try with iPython.
 
+Running threadcount
+===================
+
+If you are simply running the program, most of your work and editing 
+will only be to the runner file. You can find an example of a runner file in
+
+:download:`ex1.py <examples/ex1.py>` This example simply opens a cube and deredshifts it. 
+
+:download:`ex2.py <examples/ex2.py>` This example fits multi-component lines only, and does not analysis. 
+
+:download:`ex3_full.py <examples/ex3_full.py>` This example runs the fitting code, and analyzes the extraplaner gas of an edge-on outflow. Note it assumes the major axis is perpendicular to the image. We will add an update to generalise this in the future.  
 
 Procedures
 ==========
