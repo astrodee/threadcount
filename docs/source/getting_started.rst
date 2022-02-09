@@ -29,7 +29,9 @@ will only be to the runner file. You can find an example of a runner file in
 
 :download:`ex3_full.py <examples/ex3_full.py>` This example runs the fitting code, and analyzes the extraplaner gas of an edge-on outflow. Note it assumes the major axis is perpendicular to the image. We will add an update to generalise this in the future. Also note that in the current ex3_full.py example does not run the interactive redshift correction, because it has already been run. 
 
-The Procedures listed below will explain and demonstrate the functions that currently exists. The first time a user runs threadcount on a galaxy they will use at least 3 Procedures: deredshifting, fitting emisison lines and analysis. Note that you only need to run the redshuft correction once for a particular source. Different applications of the fitting will use different analysis scripts. As new analysis codes are written they will be added to the Procedures.  
+The Procedures listed below will explain and demonstrate the functions that currently exists. The first time a user runs threadcount on a galaxy they will use at least 3 Procedures: deredshifting, fitting emisison lines and analysis. Note that you only need to run the redshuft correction once for a particular source. Different applications of the fitting will use different analysis scripts. As new analysis codes are written they will be added to the Procedures. 
+
+On a 16 core computer, threadcount takes roughly 20 minutes to carry out the fits of one spectral line (using the 3 model setting) on a single KCWI field. Saving the plots takes a considerably large amount of time as well.  
 
 Procedures
 ==========
