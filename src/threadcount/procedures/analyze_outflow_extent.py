@@ -455,7 +455,9 @@ def extract_wcs(comment_lines):
 
 
 def process_arcsecs(input_arcsecs, comment_lines):
-    if input_arcsecs in (None, "header", "auto"):
+    if (input_arcsecs is None) or (
+        isinstance(input_arcsecs, str) and input_arcsecs in ("header", "auto")
+    ):
         try:
             output_arcsecs = extract_wcs(comment_lines)
         except IndexError:
