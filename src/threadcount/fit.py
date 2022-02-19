@@ -1779,41 +1779,41 @@ def save_pdf_plots(  # noqa: C901
             if count % 100 == 0:
                 print("Saved {}/{}".format(count, total))
 
-        # deal with the list of not-fit spaxels.
+        # # deal with the list of not-fit spaxels.
 
-        # This section should add a pdf page plot which is just a list of
-        # spaxel coordinates with no plot associated.
+        # # This section should add a pdf page plot which is just a list of
+        # # spaxel coordinates with no plot associated.
 
-        # The intention here was you
-        # could search for a spaxel coordinates, and still find it even if there
-        # were no fits. My pdf viewer didn't work like that though.... so maybe
-        # this can be eliminated.
+        # # The intention here was you
+        # # could search for a spaxel coordinates, and still find it even if there
+        # # were no fits. My pdf viewer didn't work like that though.... so maybe
+        # # this can be eliminated.
 
-        # add 1 more page if we looped over a spaxel that wasn't plotted.
-        if len(lst_no_fits) > 0:
-            pix_per_line = int(len(fitList) * 10 / 3.0)  # 10 works well if 3 plots
-            num_lines = int(2 + np.ceil(len(lst_no_fits) / pix_per_line))
-            str_no_fits = "\n".join(
-                [
-                    ", ".join(lst_no_fits[x : x + pix_per_line])
-                    for x in range(0, len(lst_no_fits), pix_per_line)
-                ]
-            )
-            fontsize = 14
-            fig_height = (num_lines * (1 / 72.0) * (fontsize + 2)) + 2 * 0.04167
-            fig = plt.figure(figsize=(4 * len(fitList), fig_height), num="No Fits")
-            plt.text(
-                0.5,
-                0.5,
-                "No Fits\n{}\nEnd of List".format(str_no_fits),
-                horizontalalignment="center",
-                verticalalignment="center",
-                transform=plt.gca().transAxes,
-                fontsize=fontsize,
-            )
-            plt.gca().set_axis_off()
-            pdf.savefig(fig)
-            plt.close(fig)
+        # # add 1 more page if we looped over a spaxel that wasn't plotted.
+        # if len(lst_no_fits) > 0:
+        #     pix_per_line = int(len(fitList) * 10 / 3.0)  # 10 works well if 3 plots
+        #     num_lines = int(2 + np.ceil(len(lst_no_fits) / pix_per_line))
+        #     str_no_fits = "\n".join(
+        #         [
+        #             ", ".join(lst_no_fits[x : x + pix_per_line])
+        #             for x in range(0, len(lst_no_fits), pix_per_line)
+        #         ]
+        #     )
+        #     fontsize = 14
+        #     fig_height = (num_lines * (1 / 72.0) * (fontsize + 2)) + 2 * 0.04167
+        #     fig = plt.figure(figsize=(4 * len(fitList), fig_height), num="No Fits")
+        #     plt.text(
+        #         0.5,
+        #         0.5,
+        #         "No Fits\n{}\nEnd of List".format(str_no_fits),
+        #         horizontalalignment="center",
+        #         verticalalignment="center",
+        #         transform=plt.gca().transAxes,
+        #         fontsize=fontsize,
+        #     )
+        #     plt.gca().set_axis_off()
+        #     pdf.savefig(fig)
+        #     plt.close(fig)
     print("Finished saving to {}".format(filename))
 
 
