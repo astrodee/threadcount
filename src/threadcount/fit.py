@@ -268,16 +268,9 @@ def interactive_lower_threshold(image, title=""):
     """
     limit = np.quantile(image.data, 0.95)
 
-    # fig, ax = plt.subplots(1, 1, constrained_layout=True)
     m_img = image > limit
-    axim = m_img.plot(zscale=True, title=title, colorbar="v")
-    # norm = mpdaf.obj.get_plot_norm(m_img.data, zscale=True)
-    # axim = plt.imshow(m_img.data, norm=norm)
+    m_img.plot(zscale=True, title=title, colorbar="v")
     fig = plt.gcf()
-    # plt.title(
-    #     "Tweak Redshift:\nSpaxels to fit. Set mask level in console.\nVal.=sum of spectrum (arb. units)"
-    # )
-    # plt.colorbar()
     plt.show(block=False)
 
     while True:
@@ -296,9 +289,10 @@ def interactive_lower_threshold(image, title=""):
             plt.close()
             return limit
         m_img = image > limit
-        norm = mpdaf.obj.get_plot_norm(m_img.data, zscale=True)
-        axim.set(data=m_img.data, norm=norm)
-        fig.canvas.draw()
+        plt.close(fig)
+        m_img.plot(zscale=True, title=title, colorbar="v")
+        fig = plt.gcf()
+        plt.show(block=False)
 
 
 def get_param_values(params, param_name, default_value=np.nan):
