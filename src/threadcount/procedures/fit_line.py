@@ -24,6 +24,7 @@ def run(s):  # noqa: C901
         subcontinuum = continuum_cube.select_lambda(this_line.low, this_line.high)
         subcontinuum_av = tc.fit.spatial_average(subcontinuum, k)
     else:
+        subcontinuum = None
         subcontinuum_av = None
 
     # Determine the SNR for each spaxel.
