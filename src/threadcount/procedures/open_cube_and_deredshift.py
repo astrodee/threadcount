@@ -9,7 +9,7 @@ def run(user_settings):
 
     The data and variance files are combined into a single cube, and the
     continuum file (if available) is kept separate. An interactive tweak redshift
-    procedure may be activated, if `setup_parameters` is True.
+    procedure may be activated, if `tweak_redshift` is True.
 
     New dict keys are added to the user_settings and returned, with
     user_settings['comment'] having comments appended to it.
@@ -30,7 +30,9 @@ def run(user_settings):
             * "var_hdu_index": int, index of the variance hdu. Default None -- mpdaf
               will attempt to guess.
             * "continuum_filename": str, filename of the variance cube. Default None.
-            * "setup_parameters": bool, run interactive tweak redshift. Default False.
+            * "tweak_redshift": bool, run interactive tweak redshift. Default False.
+            * "tweak_redshift_line": threadcount.lines.Line, the Line object to use
+              for the tweak redshift function. Default: tc.lines.L_OIII5007
             * "comment": str, default "". Any comment to add to the header of saved
               files.
 
@@ -44,7 +46,6 @@ def run(user_settings):
 
     Examples
     --------
-
     >>> from threadcount.procedures import open_cube_and_deredshift
     >>> my_settings = {
     ...     "data_filename": "MRK1486_red_metacube.fits",
@@ -62,7 +63,8 @@ def run(user_settings):
         "var_hdu_index": None,
         "continuum_filename": None,  # Empty string or None if not supplied.
         "z": 0.0339,
-        "setup_parameters": False,
+        "tweak_redshift": False,
+        "tweak_redshift_line": tc.lines.L_OIII5007,
         "comment": "",
     }
 
@@ -86,8 +88,14 @@ def run(user_settings):
     s.z_set = tc.fit.de_redshift(cube.wave, s.z, z_initial=0)
 
     # Fine Adjust redshift:
-    if s.setup_parameters is True:
-        z_tweak = tc.fit.tweak_redshift(cube, s.z_set)
+    if s.tweak_redshift is True:
+        t = s.tweak_redshift_line
+        z_tweak = tc.fit.tweak_redshift(
+            cube,
+            s.z_set,
+            center_wavelength=t.center,
+            wavelength_range=(-t.minus, t.plus),
+        )
         s.z_set = tc.fit.de_redshift(cube.wave, z_tweak, s.z_set)
     # de-redshift continuum cube.
     if continuum_cube:

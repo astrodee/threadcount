@@ -28,6 +28,41 @@ class Line(object):
     """Line object containing center and wavelength range."""
 
     def __init__(self, center, plus=15, minus=15, label="", save_str="", **kwargs):
+        """Create a Line instance, defining center, bandwidth, and plot/save strings.
+
+        A Line contains the information used to define the window that threadcount
+        will use to fit the line, as well as the display and save information. 
+        You may use one of the predefined lines, or define your own. See Examples below.
+
+        Parameters
+        ----------
+        center : float
+            The rest wavelength of the line, in Angstroms
+        plus : float, optional
+            The number of Angstroms to add to the center, by default 15
+        minus : float, optional
+            The number (positive) of Angstroms to subtract from the center, by default 15
+        label : str, optional
+            The string to display in plots. May contain spaces and latex symbols,
+            by default ""
+        save_str : str, optional
+            The string to prepend to filenames, by default the center wavelength
+            rounded to integer.
+
+        Examples
+        --------
+        Create your own Line:
+
+        >>> from threadcount.lines import Line
+        >>> OIII5007 = 5006.843
+        >>> my_line = Line(OIII5007, plus=15, minus=15, label="[OIII] 5007")
+
+        Use one of the pre-defined Lines in this module :mod:`threadcount.lines`
+        (look for the Variables beginning with "L\_"):
+
+        >>> import threadcount as tc
+        >>> my_line = tc.lines.L_OIII4959
+        """
         self.center = center
         self.plus = abs(plus)
         self.minus = abs(minus)

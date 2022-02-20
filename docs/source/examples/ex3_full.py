@@ -18,7 +18,8 @@ settings = {
     "var_hdu_index": 0,
     "continuum_filename": "Red_Cont_PPXF_original.fits",  # Empty string or None if not supplied.
     "z": 0.03386643885613516,
-    "setup_parameters": False,
+    "tweak_redshift": False,
+    "tweak_redshift_line": tc.lines.L_OIII5007,
     "comment": "",
 }
 fit_settings = {

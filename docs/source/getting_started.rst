@@ -25,13 +25,31 @@ will only be to the runner file. You can find an example of a runner file in
 
 :download:`ex1.py <examples/ex1.py>` This example simply opens a cube and deredshifts it. 
 
-:download:`ex2.py <examples/ex2.py>` This example fits multi-component lines only, and does not analysis. 
+:download:`ex2.py <examples/ex2.py>` This example fits multi-component lines only,
+and does not analysis. 
 
-:download:`ex3_full.py <examples/ex3_full.py>` This example runs the fitting code, and analyzes the extraplaner gas of an edge-on outflow. Note it assumes the major axis is perpendicular to the image. We will add an update to generalise this in the future. Also note that in the current ex3_full.py example does not run the interactive redshift correction, because it has already been run. 
+:download:`ex3_full.py <examples/ex3_full.py>` This example runs the fitting code,
+and analyzes the extraplaner gas of an edge-on outflow. Note it assumes the major
+axis is perpendicular to the image. We will add an update to generalise this in
+the future. Also note that in the current ex3_full.py example does not run the
+interactive redshift correction, because it has already been run. 
 
-The Procedures listed below will explain and demonstrate the functions that currently exists. The first time a user runs threadcount on a galaxy they will use at least 3 Procedures: deredshifting, fitting emisison lines and analysis. Note that you only need to run the redshuft correction once for a particular source. Different applications of the fitting will use different analysis scripts. As new analysis codes are written they will be added to the Procedures. 
+:download:`ex3.py <examples/ex3.py>` This example runs the analysis code of the
+above example, assuming existing output files from the fitting code. Ensure the
+input filename is correct, it will be the output from a script like ex2.py, so
+double-check the prefix inside the settings for this script, that it matches
+a file that already exists.
 
-On a 16 core computer, threadcount takes roughly 20 minutes to carry out the fits of one spectral line (using the 3 model setting) on a single KCWI field. Saving the plots takes a considerably large amount of time as well.  
+The Procedures listed below will explain and demonstrate the functions that
+currently exists. The first time a user runs threadcount on a galaxy they will
+use at least 3 Procedures: deredshifting, fitting emisison lines and analysis.
+Note that you only need to run the redshuft correction once for a particular
+source. Different applications of the fitting will use different analysis
+scripts. As new analysis codes are written they will be added to the Procedures. 
+
+On a 16 core computer, threadcount takes roughly 20 minutes to carry out the fits
+of one spectral line (using the 3 model setting) on a single KCWI field. Saving
+the plots takes a considerably large amount of time as well.  
 
 Procedures
 ==========
@@ -57,12 +75,15 @@ lmfit Models this package makes available for use. These are used just as
 the built-in fitting models from lmfit would be used, and I have implemented a
 guess method for most (if not all) of them.
 
+.. _Line intro:
+
 Line objects
 ============
 
 The Variables in the :mod:`threadcount.lines` module shows the predefined
 wavelengths and Line instances. The variables beginning with "L\_" are the Line
-objects used in the settings for the fit_lines procedure.
+objects used in the settings for the fit_lines procedure. See :class:`threadcount.lines.Line`
+for an example to define your own.
 
 
 

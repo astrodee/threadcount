@@ -12,6 +12,8 @@ We also modify the mpdaf cube's wave property to be de-redshifted.
 Here is a python script file that you should be able to copy and run if you have
 the named data file in the same directory as the script, which I have named ex1.py.
 
+Download here: :download:`ex1.py <examples/ex1.py>`
+
 .. include:: examples/ex1.py
   :code:
 
@@ -27,14 +29,16 @@ The settings available in this script are:
 * "continuum_filename": string of the file name of the continuum cube. The
   hdu index of this is assumed to be 0.
 * "z": -- float, the redshift of the object.
-* "setup_parameters": bool, whether to run the interactive tweak_redshift procedure.
+* "tweak_redshift": bool, whether to run the interactive tweak_redshift procedure.
+* "tweak_redshift_line": threadcount.lines.Line, the Line object to use, default
+  is OIII 5007. Read more in :ref:`Getting started: Line objects <Line intro>`.
 * "comment": string. A string that will be saved to the top of txt output files.
   This will be appended to as more processing steps occur.
 
 
 The absolute minimum settings needed are 'data_filename' and 'z'. For this script,
-if 'setup_parameters' is True, then an interactive "tweak redshift" procedure
-will be run. I'll demonstrate that below. If 'setup_parameters' is False, then
+if 'tweak_redshift' is True, then an interactive "tweak redshift" procedure
+will be run. I'll demonstrate that below. If 'tweak_redshift' is False, then
 the 'z' from the input will be used, and no interactive procedure will be started.
 
 Another example of how to use these settings is included in the Fit Lines
@@ -153,7 +157,8 @@ user_settings.
    'var_hdu_index': None,
    'continuum_filename': None,
    'z': 0.0339,
-   'setup_parameters': True,
+   'tweak_redshift': True,
+   'tweak_redshift_line': Line(center=5006.843, plus=15, minus=15, low=4991.843, high=5021.843, label='[OIII] 5007', save_str='5007'),
    'comment': 'data_filename: MRK1486_red_metacube.fits\nz_set: 0.03386685874525375\nimage_aspect: 1.0\nwcs_step: [0.291456 0.291456]\nobserved_delta_lambda: 0.5',
    'observed_delta_lambda': 0.5,
    'wcs_step': array([0.291456, 0.291456]),

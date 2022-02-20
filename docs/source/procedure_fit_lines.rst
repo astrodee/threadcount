@@ -15,6 +15,12 @@ the fit is re-run, and the results of this operation are combined.
 The results of this script are .txt and .pdf output files containing the fit
 results.
 
+The Variables in the
+:mod:`threadcount.lines` module shows the predefined
+wavelengths and Line instances. The variables beginning with "L\_" are the Line
+objects used in the settings for the fit_lines procedure. See :class:`threadcount.lines.Line`
+for an example to define your own.
+
 Settings
 --------
 
@@ -166,6 +172,7 @@ interaction.
 
 Script
 ^^^^^^
+Download here: :download:`ex2.py <examples/ex2.py>`
 
 .. include:: examples/ex2.py
   :code:
