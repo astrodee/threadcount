@@ -9,6 +9,9 @@ galaxy will be horizontal in the image.
 Procedure Description
 ---------------------
 
+.. note:: After Step 1, there has been a step added for
+   masking invalid data, and regions.
+
 1. Load the input file, which is ideally an output file from
    :func:`threadcount.procedures.fit_lines.run`. 
    
@@ -129,6 +132,15 @@ may change with the rapidly changing code)
 
   default_settings = {
       "one_gauss_input_file": "ex_5007_simple_model.txt",
+      "line": tc.lines.L_OIII5007,
+      # https://mpdaf.readthedocs.io/en/latest/api/mpdaf.obj.Image.html#mpdaf.obj.Image.mask_region
+      # each entry in the list is a dictionary, where they keys are the
+      # parameters for the function mask_region() in mpdaf, and the values
+      # are the corresponding values. For now, both "unit_center" and "unit_radius"
+      # MUST be included and MUST have the value None. (i.e. it only works in
+      # pixels).
+      "mask_region_arguments": [],
+      "maximum_sigma_A": 50,  # maximum allowed sigma in Angstroms.
       "velocity_mask_limit": 60,
       # manual_galaxy_region format
       # [min_row, max_row, min_column, max_column] --> array[min_row:max_row+1,min_column:max_column+1]
@@ -141,7 +153,7 @@ may change with the rapidly changing code)
       "output_base_name": "",
       "arcsec_per_pixel": 0.291456,
       "galaxy_center_pixel": [35, 62],  # row,col
-      "velocity_vmax": 140,
+      "velocity_vmax": 140, # sets the image display maximum value.
       "units": None,
   }
 
@@ -178,6 +190,43 @@ Here are explanations of each of the settings.
   header of the one_gauss_input_file will be read, and string following "units:"
   will be passed to astropy to create an astropy Unit.
 
+New settings:
+
+* **line**: A Line instance whose upper and lower wavelengths will be used to
+  determine if a gaussian's center is valid data. Spaxels with `center` outside
+  this bandwidth will be set to nan.
+* **maximum_sigma_A**: Any spaxels with sigma greater than this value will be
+  set to nan.
+
+.. _mask_region_arguments:
+
+* **mask_region_arguments**: A list of dictionaries. Each entry in the list will
+  be used in :meth:`mpdaf.obj.Image.mask_region`.
+
+  .. note::  This only works in pixel
+     units, and therefore both "unit_center" and "unit_radius" MUST be included
+     and MUST have the value None. Here's an example:
+
+     .. code::
+
+        # In the settings, replace the line that says:
+        # "mask_region_arguments" : [],
+        # with the following list to mask 2 circular regions:
+        "mask_region_arguments": [
+            {
+                "center": (329, 96),
+                "radius": 35,
+                "unit_center": None,
+                "unit_radius": None,
+            },
+            {
+                "center": (353, 171),
+                "radius": 15,
+                "unit_center": None,
+                "unit_radius": None,
+            },
+        ],
+
 Output
 ^^^^^^
 
@@ -206,6 +255,8 @@ fitting and processing, see the "Full Example", below.
 
 Script
 ^^^^^^
+
+Download here: :download:`ex3.py <examples/ex3.py>`
 
 .. include:: examples/ex3.py
   :code:
@@ -249,7 +300,11 @@ See Step 9:
 
 
 If you were to run ex3.py with the option analyze_settings["verbose"] = True,
-then 3 additional plots will be displayed (not saved).
+then ~3~ some additional plots will be displayed (but not saved). 
+
+.. note:: More diagnostic plots have been added since writing this section,
+   to help with masking invalid
+   data
 
 See Step 5:
 
@@ -273,6 +328,8 @@ Full Example
 This example shows a full set of processing, going from fits files, to line fitting,
 to contours. Complete with automatically filling
 in the analysis settings computed from the other settings. 
+
+Download here: :download:`ex3_full.py <examples/ex3_full.py>`
 
 .. include:: examples/ex3_full.py
   :code:

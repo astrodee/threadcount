@@ -2305,6 +2305,22 @@ class ResultDict(OrderedDict):
         result.comment = comment_str.strip()
         return result
 
+    def apply_mask(self, mask, fill_value=np.nan):
+        """Fill all non-DIM_NAMES images with fill_value where mask = True.
+
+        Parameters
+        ----------
+        mask : boolean numpy array of same shape as data
+            Where this is True, the data value will be replace by fill value
+        fill_value : float, optional
+            The value to fill in, by default np.nan
+        """
+        for k, v in self.items():
+            if k in self.DIM_NAMES:
+                continue
+            else:
+                v[mask] = fill_value
+
 
 class RecursiveArray(UserList):
     """Subclass of list which distributes attribute and function calls recursively."""

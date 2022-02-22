@@ -8,6 +8,10 @@ Note regarding Jupyter Notebooks
 I highly recommend using iPython, not Jupyter
 ---------------------------------------------
 
+.. note:: A part of the code has changed, 
+   so this advice may not even apply anymore... but
+   be aware there have previously been issues.
+
 Displaying and updating the images was unreliable in Jupyter notebooks -- it
 sometimes worked and sometimes didn't depending on versions. (suspect maybe
 something to do with interaction with javascript).
@@ -40,6 +44,19 @@ input filename is correct, it will be the output from a script like ex2.py, so
 double-check the prefix inside the settings for this script, that it matches
 a file that already exists.
 
+Masking regions in outflow analysis
+-----------------------------------
+
+See :ref:`mask_region_arguments <mask_region_arguments>` for an example of
+how the input setting should look.
+
+Procedures
+==========
+
+There are a few "procedures" included in threadcount. These are recipes
+for common tasks, with easily configurable settings (i.e. the "runner" files
+containing the settings).
+
 The Procedures listed below will explain and demonstrate the functions that
 currently exists. The first time a user runs threadcount on a galaxy they will
 use at least 3 Procedures: deredshifting, fitting emisison lines and analysis.
@@ -49,13 +66,7 @@ scripts. As new analysis codes are written they will be added to the Procedures.
 
 On a 16 core computer, threadcount takes roughly 20 minutes to carry out the fits
 of one spectral line (using the 3 model setting) on a single KCWI field. Saving
-the plots takes a considerably large amount of time as well.  
-
-Procedures
-==========
-
-There are a few "procedures" included in threadcount. These are recipes
-for common tasks, with an easily configurable interface.
+the plots takes a considerably large amount of time as well.
 
 
 .. toctree::

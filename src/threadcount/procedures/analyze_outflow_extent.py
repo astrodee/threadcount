@@ -1,8 +1,10 @@
 import astropy.units as u
+from astropy import visualization as viz
 import matplotlib.pyplot as plt
 import numpy as np
 import threadcount as tc
 from threadcount.procedures import set_rcParams
+from mpdaf.obj import Image
 
 
 def run(user_settings):
@@ -10,6 +12,15 @@ def run(user_settings):
     # The command line argument will take the form of a json string and override any of these options.
     default_settings = {
         "one_gauss_input_file": "ex_5007_simple_model.txt",
+        "line": tc.lines.L_OIII5007,
+        # https://mpdaf.readthedocs.io/en/latest/api/mpdaf.obj.Image.html#mpdaf.obj.Image.mask_region
+        # each entry in the list is a dictionary, where they keys are the
+        # parameters for the function mask_region() in mpdaf, and the values
+        # are the corresponding values. For now, both "unit_center" and "unit_radius"
+        # MUST be included and MUST have the value None. (i.e. it only works in
+        # pixels).
+        "mask_region_arguments": [],
+        "maximum_sigma_A": 50,  # maximum allowed sigma in Angstroms.
         "velocity_mask_limit": 60,
         # manual_galaxy_region format
         # [min_row, max_row, min_column, max_column] --> array[min_row:max_row+1,min_column:max_column+1]
@@ -22,7 +33,7 @@ def run(user_settings):
         "output_base_name": "",
         "arcsec_per_pixel": 0.291456,
         "galaxy_center_pixel": [35, 62],  # row,col
-        "velocity_vmax": 140,
+        "velocity_vmax": 140,  # sets the image display maximum value.
         "units": None,
     }
     s = tc.fit.process_settings_dict(default_settings, user_settings)  # s for settings.
@@ -39,6 +50,54 @@ def run(user_settings):
     center = input_data["g1_center"]
     flux = input_data["g1_flux"]
     snr = input_data["snr"]
+
+    # mask out invalid data:
+    # where center is not within the Line bandwidth:
+    m1 = np.ma.masked_outside(center, s.line.low, s.line.high).mask
+
+    # where sigma is unfeasible:
+    m2 = np.ma.masked_greater(sigma, s.maximum_sigma_A).mask
+
+    # where there is a manual region input to be masked:
+    if s.mask_region_arguments is None or len(s.mask_region_arguments) > 0:
+        temp_image = Image(data=sigma)
+        temp_image.mask[
+            :, :
+        ] = False  # to remove the masking of nans it does automatically.
+
+        for kwargs in s.mask_region_arguments:
+            temp_image.mask_region(**kwargs)
+
+        m3 = temp_image.mask
+    else:
+        m3 = np.ma.make_mask_none(sigma.shape)
+
+    invalid_mask = np.ma.mask_or(m1, m2)
+    invalid_mask = np.ma.mask_or(m3, invalid_mask)
+    # this works and we don't have to update sigma, center, flux because they
+    # were references to the arrays, not copies.
+    input_data.apply_mask(invalid_mask)
+
+    if s.verbose:
+        plt.figure()
+        interval = viz.ZScaleInterval()
+        vmin, vmax = interval.get_limits(flux)
+        plt.imshow(np.log10(flux), vmin=vmin, vmax=vmax)
+        plt.title("log10(flux)")
+        fig, axes = plt.subplots(2, 2)
+        ims = [m1, m2, m3, invalid_mask]
+        labels = [
+            "center outside Line bw",
+            "sigma above max sigma",
+            "masked region",
+            "combined mask",
+        ]
+        for ax, im, label in zip(fig.axes, ims, labels):
+            plt.sca(ax)
+            plt.imshow(im)
+            ax.set_title(label)
+        plt.suptitle("Mask invalid data. Plot 4 is the aggregate.")
+
     snr_cutoff = np.nanmedian(snr)
 
     # converts sigma to velocity
@@ -163,7 +222,7 @@ def run(user_settings):
 
     # fill upper down to gal_center_row:
     # find lowest row and repeat that row till center.
-    bottom_row = np.argwhere(np.sum(~upper, axis=1) > 0)[0][0]
+    bottom_row = np.argwhere(np.nansum(~upper, axis=1) > 0)[0][0]
     upper[gal_center_row:bottom_row] = upper[bottom_row]
 
     lower_outflow = np.full_like(outflow_mask, False)
@@ -176,7 +235,7 @@ def run(user_settings):
 
     # fill upper down to gal_center_row:
     # find lowest row and repeat that row till center.
-    upper_row = np.argwhere(np.sum(~lower, axis=1) > 0)[-1][-1]
+    upper_row = np.argwhere(np.nansum(~lower, axis=1) > 0)[-1][-1]
     lower[upper_row : gal_center_row + 1] = lower[upper_row]
 
     if s.verbose:
@@ -230,8 +289,9 @@ def run(user_settings):
     cbar.set_label(r"velocity dispersion [km s$^{-1}$]")
     ##################
     plt.sca(axes[1])
-
-    plt.imshow(np.log10(flux_image), extent=extent)
+    interval = viz.ZScaleInterval()
+    vmin, vmax = interval.get_limits(np.log10(flux_image.filled(np.nan)))
+    plt.imshow(np.log10(flux_image), extent=extent, vmin=vmin, vmax=vmax)
     it_colors = iter(["r--", "r"])
     plt.plot(
         contour_output_arcsec[1],
@@ -325,6 +385,9 @@ def run(user_settings):
         else:
             this_mask = lower_outflow
             this_origin = lower_origin
+
+        this_mask = this_mask | ~(np.isfinite(this_data))
+
         x_im = distance(
             np.ma.masked_where(this_mask, grid[0]),
             np.ma.masked_where(this_mask, grid[1]),
@@ -376,27 +439,38 @@ def run(user_settings):
         else:
             this_mask = lower_outflow
             this_origin = lower_origin
+
+        this_mask = this_mask | ~(np.isfinite(this_data))
+
         x_im = distance(
             np.ma.masked_where(this_mask, grid[0]),
             np.ma.masked_where(this_mask, grid[1]),
             this_origin,
         )
+
         data_im = np.ma.masked_where(this_mask, this_data)
 
         x, y = sort_data(x_im, data_im)
 
-        model = tc.models.Log10_DoubleExponentialModel()
-        params = model.guess(np.log10(y), x)
+        skip_fitresult = False
+        try:
+            model = tc.models.Log10_DoubleExponentialModel()
+            params = model.guess(np.log10(y), x)
+            fitresult = model.fit(np.log10(y), x=x, params=params, method="least_sq")
+            fitresult_string = fitresult.fit_report()
+        except Exception:  # I know this is bad practice but
+            skip_fitresult = True
+            fitresult = None
+            fitresult_string = "Error during fit."
 
-        fitresult = model.fit(np.log10(y), x=x, params=params, method="least_sq")
+        description_string = "##### {} outflow #####\n\n".format(which_side)
         summary_string = (
             "\n".join(radius_at_fraction(x, y, [50, 90], return_string=True)) + "\n\n"
         )
-        description_string = "##### {} outflow #####\n\n".format(which_side)
-        string_to_output += (
-            description_string + summary_string + fitresult.fit_report() + "\n\n"
-        )
 
+        string_to_output += (
+            description_string + summary_string + fitresult_string + "\n\n"
+        )
         # fitresult.plot(ylabel=r"$log_{10}$(flux)")
         # set_title()
         # comps = list(fitresult.eval_components(x=x).items())
@@ -408,33 +482,40 @@ def run(user_settings):
         a = plt.hist2d(x, np.log10(y), bins=40, cmap="Blues", cmin=1)
         mins = min([b.min() for b in a[1:3]], mins)
         maxs = max([b.max() for b in a[1:3]], maxs)
-        comps = list(fitresult.eval_components(x=x).items())
-        for key, data in comps:
-            plt.plot(
-                x,
-                np.log10(data),
-                "red",
-                label="decay: {:.3g}".format(fitresult.params[key + "decay"].value),
+
+        if not skip_fitresult:
+            comps = list(fitresult.eval_components(x=x).items())
+            for key, data in comps:
+                plt.plot(
+                    x,
+                    np.log10(data),
+                    "red",
+                    label="decay: {:.3g}".format(fitresult.params[key + "decay"].value),
+                )
+            plt.plot(x, fitresult.best_fit, "red", label="bestfit")
+            textstr = "Inner scale length: {:.3g}\nOuter scale length: {:.3g}".format(
+                *sorted(
+                    [
+                        p.value
+                        for k, p in fitresult.params.items()
+                        if k.endswith("decay")
+                    ]
+                )
             )
-        plt.plot(x, fitresult.best_fit, "red", label="bestfit")
+            plt.gca().text(
+                0.97,
+                0.97,
+                textstr,
+                transform=plt.gca().transAxes,
+                verticalalignment="top",
+                horizontalalignment="right",
+            )
         # plt.gca().set_ylim(bottom=-2.2);
         # plt.legend()
         plt.title("{}".format(which_side))
         plt.ylabel(r"$log_{10}$(flux) [arb.]")
         plt.xlabel("distance to {} origin [arcsec]".format(which_side))
-        textstr = "Inner scale length: {:.3g}\nOuter scale length: {:.3g}".format(
-            *sorted(
-                [p.value for k, p in fitresult.params.items() if k.endswith("decay")]
-            )
-        )
-        plt.gca().text(
-            0.97,
-            0.97,
-            textstr,
-            transform=plt.gca().transAxes,
-            verticalalignment="top",
-            horizontalalignment="right",
-        )
+
     # plt.autoscale()
     dx = maxs[0] - mins[0]
     dy = maxs[1] - mins[1]
@@ -580,7 +661,7 @@ def calculate_contours(flux_masked_array, levels=None, clip_max=3, center_row=35
             contour_output += [output_row]
             continue
         this_row = flux_masked_array[row]
-        total = this_row.sum()
+        total = np.nansum(this_row)
 
         loop_total = this_row[max_col]
         count = 0
@@ -671,7 +752,8 @@ def radius_at_fraction(x, y, values, return_string=False):
         values = np.array([values])
     if values[0] > 1:
         values = values / 100.0
-    goals = np.array(values) * y.sum()
+    # goals = np.array(values) * y.sum()
+    goals = np.array(values) * np.nansum(y)
     results = []
     it = iter(goals)
     this_goal = next(it)

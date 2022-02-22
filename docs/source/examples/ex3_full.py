@@ -108,6 +108,17 @@ analyze_settings.update(
                 ],
             )
         ),
+        # commented out "line" because it is set above.
+        # "line": tc.lines.L_OIII5007,
+
+        # https://mpdaf.readthedocs.io/en/latest/api/mpdaf.obj.Image.html#mpdaf.obj.Image.mask_region
+        # each entry in the list is a dictionary, where they keys are the
+        # parameters for the function mask_region() in mpdaf, and the values
+        # are the corresponding values. For now, both "unit_center" and "unit_radius"
+        # MUST be included and MUST have the value None. (i.e. it only works in
+        # pixels).
+        "mask_region_arguments": [],
+        "maximum_sigma_A": 50,  # maximum allowed sigma in Angstroms.
         "velocity_mask_limit": 60,
         # manual_galaxy_region format
         # [min_row, max_row, min_column, max_column] --> array[min_row:max_row+1,min_column:max_column+1]
@@ -120,7 +131,10 @@ analyze_settings.update(
         "outflow_contour_level": 0.5,
         "output_base_name": settings["output_filename"],
         "galaxy_center_pixel": [35, 62],  # row,col
-        "velocity_vmax": 140,
+        "velocity_vmax": 140,  # sets the image display maximum value.
+        # the below setting gets the setting "wcs_step" if it was set earlier in
+        # the script, and if that doesn't exist, uses the value "header", which
+        # will read in the "arcsec_per_pixel" from the "one_gauss_input_file" header.
         "arcsec_per_pixel": settings.get("wcs_step", "header"),
         "units": "header",
     }
