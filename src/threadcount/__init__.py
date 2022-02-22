@@ -7,3 +7,5 @@ from . import mpdaf_ext
 from . import lmfit_ext
 
 __all__ = ["fit", "lines", "models", "mpdaf_ext", "lmfit_ext"]
+
+__version__ = "0.0.2"
