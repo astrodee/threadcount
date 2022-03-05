@@ -246,13 +246,13 @@ def lmfit(self, model, **kwargs):
     try:
         modelresult = model.fit(data, params=params, x=x, weights=weights, **kwargs)
     except ValueError as e:
-        if not str(e).contains("infeasible"):
+        if not "infeasible" in str(e):
             raise
         else:
             # this happens when the param value is outside the bounds, so lets
             # cyle through the params and set their value to be their value,
             # because lmfit ensures that it's within the bounds.
-            for param in params:
+            for param in params.values():
                 param.set(value=param.value)
             try:
                 modelresult = model.fit(
