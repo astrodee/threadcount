@@ -2461,7 +2461,7 @@ def plot_baseline(fitresult):
     mask = fitresult.weights.mask
     fit = fitresult.best_fit
     orig_y_nomask = np.ma.array(orig_y, mask=False, keep_mask=False)
-    new_y = orig_y - fit
+    new_y = orig_y_nomask - fit
 
     all_y = np.array(
         [
