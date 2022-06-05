@@ -168,6 +168,7 @@ def run(s):  # noqa: C901
         auto_aic_choices,
         user_check,
     )
+    return s
 
 
 def save_files(

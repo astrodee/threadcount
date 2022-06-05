@@ -2460,6 +2460,7 @@ def plot_baseline(fitresult):
     orig_y = fitresult.data
     mask = fitresult.weights.mask
     fit = fitresult.best_fit
+    orig_y_nomask = np.ma.array(orig_y, mask=False, keep_mask=False)
     new_y = orig_y - fit
 
     all_y = np.array(
@@ -2485,13 +2486,15 @@ def plot_baseline(fitresult):
     # plt.gca().autoscale(enable=False, axis='y')
     plt.plot(
         x,
-        np.ma.array(orig_y, mask=None),
+        orig_y_nomask,
         color="orangered",
         zorder=-2,
         label="original data",
+        linewidth=3,
+        alpha=0.8,
     )
     plt.plot(
-        x, np.ma.array(new_y, mask=None), color="forestgreen", zorder=-1, label="new"
+        x, new_y, color="forestgreen", zorder=-1, label="new", linewidth=3, alpha=0.7
     )
     plt.gca().set_ylim(ylim)
     plt.axhline(0, color="k")

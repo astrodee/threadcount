@@ -35,7 +35,8 @@ def fit_lines(s):
     num_lines = len(s.lines)
     for i in range(num_lines):
         s._i = i
-        fit_line.run(s)
+        s = fit_line.run(s)
+    return s
 
 
 def run(user_settings):
@@ -110,5 +111,5 @@ def run(user_settings):
     s = tc.fit.process_settings_dict(default_settings, user_settings)  # s for settings.
 
     update_settings(s)
-    fit_lines(s)
+    s = fit_lines(s)
     return s.__dict__
