@@ -1204,9 +1204,10 @@ def interactive_user_choice(fits, choices, user_check, baseline_fits=None):
                 user_choice=None,
             )
             # create a second fig panel for the baseline fit:
+            fig_bl = None
             if baseline_fits is not None:
                 if baseline_fits[this_pix]:
-                    plot_baseline(baseline_fits[this_pix])
+                    fig_bl = plot_baseline(baseline_fits[this_pix])
             # display in non-blocking way, to enable console interaction.
             plt.show(block=False)
 
@@ -1218,6 +1219,7 @@ def interactive_user_choice(fits, choices, user_check, baseline_fits=None):
                 )
             )
             plt.close(fig)
+            plt.close(fig_bl)
 
             # process user input --
 
@@ -2470,7 +2472,7 @@ def plot_baseline(fitresult):
     ax_buffer = 0.1 * (all_y.max() - all_y.min())
     ylim = [all_y.min() - ax_buffer, all_y.max() + ax_buffer]
 
-    plt.figure()
+    fig = plt.figure()
     plt.plot(
         x,
         np.ma.array(orig_y, mask=mask),
@@ -2481,7 +2483,16 @@ def plot_baseline(fitresult):
     )
     plt.plot(x, fit, "--k", label="fit")
     # plt.gca().autoscale(enable=False, axis='y')
-    plt.plot(x, orig_y, color="orangered", zorder=-2, label="original data")
-    plt.plot(x, new_y, color="forestgreen", zorder=-1, label="new")
+    plt.plot(
+        x,
+        np.ma.array(orig_y, mask=None),
+        color="orangered",
+        zorder=-2,
+        label="original data",
+    )
+    plt.plot(
+        x, np.ma.array(new_y, mask=None), color="forestgreen", zorder=-1, label="new"
+    )
     plt.gca().set_ylim(ylim)
     plt.axhline(0, color="k")
+    return fig
