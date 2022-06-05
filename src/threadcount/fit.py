@@ -1142,7 +1142,7 @@ def get_ngaussians(fit):
     return sum(["gaussian" in comp._name for comp in fit.components])
 
 
-def interactive_user_choice(fits, choices, user_check):
+def interactive_user_choice(fits, choices, user_check, baseline_fits=None):
     """Choose best model from a display of all model fits to a pixel.
 
     This function goes through each spaxel flagged for user verification (via
@@ -1203,7 +1203,10 @@ def interactive_user_choice(fits, choices, user_check):
                 user_checked=None,
                 user_choice=None,
             )
-
+            # create a second fig panel for the baseline fit:
+            if baseline_fits is not None:
+                if baseline_fits[this_pix]:
+                    plot_baseline(baseline_fits[this_pix])
             # display in non-blocking way, to enable console interaction.
             plt.show(block=False)
 
@@ -2390,3 +2393,95 @@ class RecursiveArray(UserList):
             Array representing this whole RecursiveArray.
         """
         return np.array(self.data, dtype=dtype, **kwargs)
+
+
+def remove_baseline(
+    cube, subcube_av, this_baseline_range, baseline_fit_type, iterate_over_pixels
+):
+    # modifies subcube_av in place.
+    # returns 2d array fit_results.
+
+    spatial_shape = subcube_av.shape[1:]
+    subcube_wave_range = subcube_av.wave.get_range()
+
+    buffer_outside = 10
+    baseline_subcube = cube.select_lambda(
+        this_baseline_range[0][0] - buffer_outside,
+        this_baseline_range[1][1] + buffer_outside,
+    )
+
+    fit_results = np.full(spatial_shape, None, dtype=object)
+
+    for pix in iterate_over_pixels:
+        this_spectrum = baseline_subcube[:, pix[0], pix[1]]
+        this_fitresult = fit_baseline(
+            this_spectrum, this_baseline_range, baseline_fit_type
+        )
+
+        # set the output array value
+        fit_results[pix] = this_fitresult
+
+        # subtract from subcube_av in place.
+        if this_fitresult:
+            baseline_model = this_spectrum.clone()
+            baseline_model.data = this_fitresult.best_fit
+            subcube_av[:, pix[0], pix[1]] -= baseline_model.subspec(*subcube_wave_range)
+
+    return fit_results
+
+
+def fit_baseline(spectrum, this_baseline_range, baseline_fit_type):
+    # mask only the appropriate regions:
+    this_spectrum = spectrum.copy()
+    this_spectrum.unmask()
+    this_spectrum.mask_region(
+        lmin=this_baseline_range[0][1], lmax=this_baseline_range[1][0], unit=u.angstrom
+    )
+    this_spectrum.mask_region(lmin=this_baseline_range[1][1], unit=u.angstrom)
+    this_spectrum.mask_region(lmax=this_baseline_range[0][0], unit=u.angstrom)
+
+    if baseline_fit_type == "linear":
+        baseline_model = lmfit.models.LinearModel()
+    elif baseline_fit_type == "quadratic":
+        baseline_model = lmfit.models.QuadraticModel()
+    else:
+        print("No valid baseline fit type, skipping baseline fitting.")
+        return None
+
+    fitresult = this_spectrum.lmfit(baseline_model, method="least_squares")
+
+    return fitresult
+
+
+def plot_baseline(fitresult):
+    x = fitresult.userkws["x"]
+    orig_y = fitresult.data
+    mask = fitresult.weights.mask
+    fit = fitresult.best_fit
+    new_y = orig_y - fit
+
+    all_y = np.array(
+        [
+            *np.ma.array(orig_y, mask=mask).compressed(),
+            *np.ma.array(new_y, mask=mask).compressed(),
+            *fit,
+        ]
+    )
+    ax_buffer = 0.1 * (all_y.max() - all_y.min())
+    ylim = [all_y.min() - ax_buffer, all_y.max() + ax_buffer]
+
+    plt.figure()
+    plt.plot(
+        x,
+        np.ma.array(orig_y, mask=mask),
+        "o",
+        color="mediumblue",
+        label="fitted points",
+        zorder=5,
+    )
+    plt.plot(x, fit, "--k", label="fit")
+    # plt.gca().autoscale(enable=False, axis='y')
+    plt.plot(x, orig_y, color="orangered", zorder=-2, label="original data")
+    plt.plot(x, new_y, color="forestgreen", zorder=-1, label="new")
+    plt.gca().set_ylim(ylim)
+    plt.axhline(0, color="k")

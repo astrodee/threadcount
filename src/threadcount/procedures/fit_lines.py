@@ -48,6 +48,8 @@ def run(user_settings):
             # (48, 58),
             # (52, 56),
         ],
+        "baseline_subtract": None,  # Options: None, "linear", "quadratic"
+        "baseline_fit_range": None,  # a list of: [[left_begin, left_end],[right_begin, right_end]], one for each line.
         #
         # output options
         "output_filename": "example_output",  # saved files will begin with this.

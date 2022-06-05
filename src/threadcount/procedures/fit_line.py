@@ -11,6 +11,9 @@ def run(s):  # noqa: C901
     this_line = s.lines[index]
     print("Processing line {}".format(this_line.label))
     models = s.models[index]
+    # initialize baseline results:
+    if not hasattr(s, "baseline_results"):
+        s.baseline_results = [None] * len(s.lines)
 
     # create a subcube, and region average each of the wavelength channels.
     # creating a subcube like this is a view into the original cube, and doesn't copy
@@ -62,6 +65,16 @@ def run(s):  # noqa: C901
     iterate = np.ndindex(*spatial_shape)
     if len(s.monitor_pixels) > 0 and (s.setup_parameters):
         iterate = s.monitor_pixels
+
+    baseline_fitresults = None
+    if s.baseline_subtract:
+        this_baseline_range = s.baseline_fit_range[s._i]
+        baseline_fit_type = s.baseline_subtract
+        baseline_fitresults = tc.fit.remove_baseline(
+            cube, subcube_av, this_baseline_range, baseline_fit_type, iterate
+        )
+        s.baseline_results[s._i] = baseline_fitresults
+
     for idx in iterate:
         sp = subcube_av[(slice(None), *idx)]
         # this below line is how I originally tried this, and it works.
@@ -276,7 +289,10 @@ def choose_best_fits(models, fit_results_T, s, fit_results):
                 final_choices = auto_aic_choices
             else:
                 final_choices = tc.fit.interactive_user_choice(
-                    fit_results, auto_aic_choices, user_check
+                    fit_results,
+                    auto_aic_choices,
+                    user_check,
+                    baseline_fits=s.baseline_results[s._i],
                 )
         else:
             final_choices = auto_aic_choices
