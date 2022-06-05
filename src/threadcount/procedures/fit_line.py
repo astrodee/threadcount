@@ -1,5 +1,6 @@
 import numpy as np
 import threadcount as tc
+from itertools import tee
 
 
 def run(s):  # noqa: C901
@@ -62,16 +63,18 @@ def run(s):  # noqa: C901
 
     # iterate over every spaxel (i.e. retrieve each spectrum):
     # (choose this direct way of iteration in order to eventually use example pixels)
-    iterate = np.ndindex(*spatial_shape)
+    iterate_full = np.ndindex(*spatial_shape)
     if len(s.monitor_pixels) > 0 and (s.setup_parameters):
-        iterate = s.monitor_pixels
+        iterate_full = s.monitor_pixels
+
+    iterate, bl_iterate = tee(iterate_full, 2)
 
     baseline_fitresults = None
     if s.baseline_subtract:
         this_baseline_range = s.baseline_fit_range[s._i]
         baseline_fit_type = s.baseline_subtract
         baseline_fitresults = tc.fit.remove_baseline(
-            cube, subcube_av, this_baseline_range, baseline_fit_type, iterate
+            cube, subcube_av, this_baseline_range, baseline_fit_type, bl_iterate
         )
         s.baseline_results[s._i] = baseline_fitresults
 
