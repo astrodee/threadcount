@@ -328,6 +328,10 @@ def summary_array(self, fit_info=None, param_info=None):
 
 
 def order_gauss(self, delta_x=0.5):
+    # shifting things around can get messy when there are expressions involved.
+    # First things first: Lets remove all expressions.
+    for p in self.values():
+        p.set(expr='')
 
     ngauss = sum([x.startswith("g") and x.endswith("_sigma") for x in self])
     if ngauss in (0, 1):
@@ -357,7 +361,7 @@ def order_gauss(self, delta_x=0.5):
             orig_prefix = "g{}_".format(order + 1)
             # g{order+1}_ -> g{i+1}_
             for name in self.keys():
-                if name.startswith(dest_prefix) and self[name].expr is None:
+                if name.startswith(dest_prefix):
                     suffix = name[len(dest_prefix) :]
                     self[name] = paramcopy[orig_prefix + suffix]
 
