@@ -160,7 +160,7 @@ def tweak_redshift(
     """
     plt.close()
     print("====================================")
-    print("Tweak reshift procedure has started.")
+    print("Tweak redshift procedure has started.")
     print("====================================\n\n")
     print("Using line {:.4g} +/- {} A".format(center_wavelength, wavelength_range[1]))
 
