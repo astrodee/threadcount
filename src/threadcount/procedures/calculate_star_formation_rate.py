@@ -227,14 +227,6 @@ def calc_sfr(galaxy_dictionary, z, wcs_step, include_outflow=False):
     print('Spaxel Area:', (x*y)*(proper_dist)**2)
     print(' ')
 
-    """try:
-        x = header['CD1_2']*60*60
-        y = header['CD2_1']*60*60
-
-    except:
-        x = (-header['CDELT2']*np.sin(header['CROTA2'])) *60*60
-        y = (header['CDELT1']*np.sin(header['CROTA2'])) *60*60"""
-
     sfr_surface_density = sfr/((x*y)*(proper_dist**2))
     sfr_surface_density_err = sfr_err/((x*y)*(proper_dist**2))
 
