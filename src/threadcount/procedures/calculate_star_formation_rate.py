@@ -136,67 +136,6 @@ def get_arrays(galaxy_dictionary, var_string):
     return galaxy_var, galaxy_var_error, outflow_var, outflow_var_error
 
 
-def get_flux_arrays(galaxy_dictionary):
-    """
-    Uses the dictionary from threadcount to create arrays of flux for the outflow
-    and galaxy gaussians.
-
-    Parameters
-    ----------
-    galaxy_dictionary : dictionary
-        dictionary with the threadcount results
-
-    Returns
-    -------
-    galaxy_flux : :obj:'~numpy.ndarray'
-        the flux for the galaxy component
-
-    galaxy_flux_error : :obj:'~numpy.ndarray'
-        the flux error for the galaxy component
-
-    outflow_flux : :obj:'~numpy.ndarray'
-        the flux for the outflow component
-
-    outflow_flux_error : :obj:'~numpy.ndarray'
-        the flux error for the outflow component
-    """
-    #create arrays to save the fluxes into
-    galaxy_flux = np.full_like(galaxy_dictionary['choice'], np.nan, dtype=np.double)
-    galaxy_flux_error = np.full_like(galaxy_dictionary['choice'], 0.0, dtype=np.double)
-    outflow_flux = np.full_like(galaxy_dictionary['choice'], np.nan, dtype=np.double)
-    outflow_flux_error = np.full_like(galaxy_dictionary['choice'], 0.0, dtype=np.double)
-
-    #create the mask of where outflows are
-    flow_mask = (galaxy_dictionary['choice']==2)
-
-    #use the flow mask to define the galaxy and outflow gaussians
-    #g1 is the blue-est gaussian, so we need g2 where choice==2
-    #and we need g1 where choice==1
-    galaxy_flux[~flow_mask] = galaxy_dictionary['avg_g1_flux'][~flow_mask]
-    galaxy_flux[flow_mask] = galaxy_dictionary['avg_g2_flux'][flow_mask]
-
-    galaxy_flux_error[~flow_mask] = galaxy_dictionary['avg_g1_flux_err'][~flow_mask]
-    galaxy_flux_error[flow_mask] = galaxy_dictionary['avg_g2_flux_err'][flow_mask]
-
-    outflow_flux[flow_mask] = galaxy_dictionary['avg_g1_flux'][flow_mask]
-    outflow_flux_error[flow_mask] = galaxy_dictionary['avg_g1_flux_err'][flow_mask]
-
-    #now we need all the places where there are two Gaussians, BUT the red one
-    #has a lower height and lower flux than the blue one
-    #then we swap them
-
-    flow_mask = (galaxy_dictionary['choice']==2) & (galaxy_dictionary['avg_g1_flux']>galaxy_dictionary['avg_g2_flux']) & (galaxy_dictionary['avg_g1_height']>galaxy_dictionary['avg_g2_height'])
-
-    galaxy_flux[flow_mask] = galaxy_dictionary['avg_g1_flux'][flow_mask]
-    galaxy_flux_error[flow_mask] = galaxy_dictionary['avg_g1_flux_err'][flow_mask]
-
-    outflow_flux[flow_mask] = galaxy_dictionary['avg_g2_flux'][flow_mask]
-    outflow_flux_error[flow_mask] = galaxy_dictionary['avg_g2_flux_err'][flow_mask]
-
-
-    return galaxy_flux, galaxy_flux_error, outflow_flux, outflow_flux_error
-
-
 #-------------------------------------------------------------------------------
 # SFR CALCULATIONS
 #-------------------------------------------------------------------------------
