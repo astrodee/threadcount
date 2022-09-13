@@ -2498,4 +2498,5 @@ def plot_baseline(fitresult):
     )
     plt.gca().set_ylim(ylim)
     plt.axhline(0, color="k")
+    plt.legend()
     return fig
