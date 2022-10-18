@@ -1,6 +1,6 @@
 """
 NAME:
-	calculate_velocity_bands.py
+	calculate_velocity_cuts.py
 
 FUNCTIONS INCLUDED:
 
