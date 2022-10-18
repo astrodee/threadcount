@@ -12,6 +12,8 @@ from matplotlib import pyplot as plt
 
 from astropy.io import fits
 from astropy import units
+from astropy.constants import G
+from astropy.cosmology import WMAP9 as cosmo
 
 from threadcount import fit
 from threadcount import models
