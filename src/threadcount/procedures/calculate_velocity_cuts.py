@@ -31,7 +31,18 @@ importlib.reload(fit)
 
 def fits_read_in(filename):
     """
-    Reads in the data fits file
+    Reads in the data fits file, assuming that the data and variance are in the
+    same file with indices 0 and 1 respectively
+
+    Parameters
+    ----------
+    filename : str
+        the filename and location of the fits file
+
+    Returns
+    -------
+    :class:`mpdaf.obj.Cube`
+        A data cube.
     """
     cube = fit.open_fits_cube(filename, data_hdu_index=0, var_filename=filename, var_hdu_index=1)
 
@@ -40,6 +51,18 @@ def fits_read_in(filename):
 def get_wave_vector(cube, z=None):
     """
     Gets the wavelength vector from the mpdaf cube object and deredshifts it
+
+    Parameters
+    ----------
+    cube : :class:`mpdaf.obj.Cube`
+        the data cube
+    z : float or None, optional
+        the redshift (Default is None)
+
+    Returns
+    -------
+    :class:`mpdaf.obj.Cube`
+        the de-redshifted cube
     """
     wave = cube.wave.coord()
 
@@ -55,6 +78,20 @@ def get_wave_vector(cube, z=None):
 def read_in_threadcount_dict(filename):
     """
     Reads in the threadcount output as a dictionary
+
+    Parameters
+    ----------
+    filename : str
+        the file name and location of the threadcount results saved in a dictionary
+
+    Returns
+    -------
+    gal_dict : dict
+        the threadcount results in a dictionary
+    wcs_step : list [float, float]
+        the step in the WCS from the threadcount results header
+    z : float
+        the redshift from the threadcount results header
     """
     #read in the dictionary
     gal_dict = fit.ResultDict.loadtxt(filename)
@@ -75,6 +112,18 @@ def extract_from_comments(comment_lines, search_string):
     """
     Extracts info from the comments in the threadcount output text file
     Copied from a extract_wcs() in analyze_outflow_extent.py
+
+    Parameters
+    ----------
+    comment_lines : str
+        the commented header lines from the threadcount results header
+    search_string : str
+        the variable to search for (e.g. "wcs_step:", "z_set:")
+
+    Returns
+    -------
+    The value or list indicated in the threadcount output file by the
+    search_string
     """
     #search_string = "wcs_step:"
     wcs_line = [x for x in comment_lines if x.startswith(search_string)][0]
@@ -93,21 +142,43 @@ def create_subcube(cube, center_wavelength=lines.Hb4861, wavelength_range=(-150,
     cube : :class:`mpdaf.obj.Cube`
         A datacube containing the wavelength range set in these parameters
     center_wavelength : float, optional
-        The center wavelength of the emission line to fit, by default :const:`threadcount.lines.OIII5007`
+        The center wavelength of the emission line to fit, by default :const:`threadcount.lines.Hb4861`
     wavelength_range : array-like [float, float], optional
         The wavelength range to fit, in Angstroms. These are defined as a change
-        from the `center_wavelength`, by default (-15, 15)
+        from the `center_wavelength`, by default (-150, 150)
+
+    Returns
+    -------
+    subcube : :class:`mpdaf.obj.Cube`
+        A subset of the input datacube centred on the input emission line
     """
     subcube = cube.select_lambda(
         center_wavelength + wavelength_range[0],
-        center_wavelength + wavelengths[1])
+        center_wavelength + wavelength_range[1])
 
     return subcube
 
 
 def subtract_baseline(spec, this_baseline_range, baseline_fit_type):
     """
-    Subtracts the baseline from the spectrum
+    Fits and subtracts the baseline from the spectrum
+
+    Parameters
+    ----------
+    spec : `mpdaf.obj.spectrum.Spectrum`
+        An mpdaf spectrum with the data to subtract the baseline from
+    this_baseline_range : list
+        A list of [[left_begin, left_end],[right_begin, right_end]]
+        Describes the wavelength range of data to use in fitting the baseline
+    baseline_fit_type : str or None
+        Options: None, "linear", "quadratic"
+
+    Returns
+    -------
+    baseline_fit : `lmfit.model.ModelResult`
+        The lmfit fitted model class for the baseline
+    new_spec : `numpy.ma.core.MaskedArray`
+        A numpy masked array of the data minus the baseline fit
     """
     #create the fit
     baseline_fit = fit.fit_baseline(
@@ -129,7 +200,28 @@ def subtract_baseline(spec, this_baseline_range, baseline_fit_type):
 
 def subtract_gaussian(wave, spec, height, center, sigma, const=None):
     """
-    Subtracts the fitted gaussian from the data
+    Subtracts the fitted Gaussian from the data
+
+    Parameters
+    ----------
+    wave : :obj:'~numpy.ndarray'
+        Array with the wavelength vector
+    spec : `mpdaf.obj.spectrum.Spectrum`
+        An mpdaf spectrum with the data to subtract the Gaussian from
+    height : float
+        The height of the Gaussian
+    center : float
+        The central wavelength of the Gaussian in Angstroms
+    sigma : float
+        The dispersion of the Gaussian in Angstroms
+    const : float, optional
+        A constant to add to the Gaussian in case there's a constant continuum
+        level to take care of
+
+    Returns
+    -------
+    residuals : :class: `mpdaf.obj.spectrum.Spectrum`
+        The residual of the Gaussian subtracted from the data
     """
     #get the gaussian
     gauss = models.gaussianH(wave, height=height, center=center, sigma=sigma)
@@ -181,13 +273,64 @@ def wave_to_vel(wave, center):
 
 def get_velocity_bands(vel_vec, residuals, gal_center, gal_sigma, v_esc):
     """
-    Gets the flux in each velocity band
+    Converts the sigma from the fits to the velocity dispersion
+
+    Parameters
+    ----------
+    gal_sigma : float or :obj:'~numpy.ndarray'
+        Vector of sigmas
+    gal_center : float or :obj:'~numpy.ndarray'
+        The central value fit for the narrow galaxy gaussian
+
+    Returns
+    -------
+    vel_disp: float or :obj:'~numpy.ndarray'
+        Vector of velocity dispersions
     """
     #convert the galaxy sigma to velocity space
     #do c*wave/center
     c = 299792.458 * (units.km/units.s)
     gal_sigma_vel = c * gal_sigma/gal_center
 
+    return gal_sigma_vel
+
+#-------------------------------------------------------------------------------
+# VELOCITY BANDS
+#-------------------------------------------------------------------------------
+
+def get_velocity_bands(vel_vec, wave, residuals, gal_sigma_vel, v_esc, v_end):
+    """
+    Gets the flux in each velocity band (disk, fountain and escaping) from a
+    single emission line
+
+    Parameters
+    ----------
+    vel_vec : :obj:'~numpy.ndarray'
+        Vector of velocities
+    wave : :obj:'~numpy.ndarray'
+        Vector of wavelengths
+    residuals : :obj:'~numpy.ndarray'
+        Vector of residuals (make sure this is the numpy array, not the
+        :class:`mpdaf.obj.spectrum.Spectrum` object)
+    gal_sigma_vel : float
+        The average velocity dispersion of the galaxy disk
+    v_esc : float
+        The escape velocity
+    v_end : float
+        The velocity where the flux of the emission line disappears into the noise
+
+    Returns
+    -------
+    disk_turb_flux : float
+        Emission line flux from gas which is likely remaining within the galaxy
+        disk
+    fountain_flux : float
+        Flux from gas which is likely above the plane of the galaxy, but not
+        reaching high enough velocities to escape
+    escape_flux : float
+        Flux from gas which is likely reaching velocities that enable it to escape
+        the galaxy
+    """
     #Disk Turbulence
     #add up everything between vel=0 and vel=gal_sigma
     disk_turb_mask = (vel_vec > -gal_sigma_vel.value) & (vel_vec < gal_sigma_vel.value)
@@ -212,7 +355,28 @@ def get_velocity_bands(vel_vec, residuals, gal_center, gal_sigma, v_esc):
 
 def plot_data_minus_gal(wave, cube, residuals, gal_dict, i, j):
     """
-    Plot of the two gaussian fit, and the leftover data
+    Plot of the two gaussian fit, and the residuals for spaxel (i,j)
+
+    Parameters
+    ----------
+    wave : :obj:'~numpy.ndarray'
+        wavelength vector
+    spec : :obj:'~numpy.ndarray'
+        the spectrum (same length as wave)
+    residuals : :obj:'~numpy.ndarray'
+        the residuals from spec - Gaussian (same length as wave)
+    gal_dict : dict
+        the threadcount results dictionary
+    i : int
+        the x-index of the spaxel to plot
+    j : int
+        the y-index of the spaxel to plot
+
+    Returns
+    -------
+    :obj:`matplotlib.figure.Figure`
+        a plot with the double Gaussian fit from threadcount, with the residuals
+        from the data - Gaussian also plotted
     """
     #get the centre values
     gal_center, gal_center_err, flow_center, flow_center_err = calc_sfr.get_arrays(gal_dict, var_string='center')
@@ -266,9 +430,49 @@ def plot_data_minus_gal(wave, cube, residuals, gal_dict, i, j):
 # MAIN
 #-------------------------------------------------------------------------------
 
-def main(data_filename, tc_filename):
+def main(data_filename, tc_filename, this_baseline_range=[], baseline_fit_type=None, v_esc=300*units.km/units.s, disk_sigma=60*units.km/units.s, line=lines.L_Hb4861):
     """
     Runs the whole thing
+
+    Parameters
+    ----------
+    data_filename : str
+        The file name and location of the data fits file with data in extension
+        0 and variance in extension 1
+    tc_filename : str
+        The file name and location of where the threadcount dictionary results
+        were saved
+    this_baseline_range : list [[float, float], [float, float]], optional
+        The range of wavelengths to use in the baseline subtraction.  A list of
+        [[left_begin, left_end], [right_begin, right_end]]
+        If baseline_fit_type is not None, this NEEDS TO BE INCLUDED.
+    baseline_fit_type : str, optional
+        The type of fit to do to the baseline to subtract leftover continuum.
+        Options are "quadratic", "linear" or None
+        If this is not None, MUST include this_baseline_range parameter.
+    v_esc : float, :obj: `astropy.units.quantity.Quantity`
+        The escape velocity in km/s (includes the units)
+        Default is 300 km/s
+    disk_sigma : float, :obj: `astropy.units.quantity.Quantity`
+        The average disk velocity dispersion in km/s (includes the units)
+        Default is 60 km/s
+    line : :obj: `threadcount.lines.Line`
+        A threadcount emission line object with the information about line centre,
+        line name, etc.
+
+    Returns
+    -------
+    residuals : :obj: `mpdaf.obj.cube.Cube`
+        An mpdaf Cube with the results of the emission line minus Gaussian
+    disk_turb_flux : :obj:'~numpy.ndarray' `astropy.units.quantity.Quantity`
+        Array of emission line flux from gas which is likely remaining within
+        the galaxy disk
+    fountain_flux : :obj:'~numpy.ndarray' `astropy.units.quantity.Quantity`
+        Array of flux from gas which is likely above the plane of the galaxy,
+        but not reaching high enough velocities to escape
+    escape_flux : :obj:'~numpy.ndarray' `astropy.units.quantity.Quantity`
+        Array of flux from gas which is likely reaching velocities that enable
+        it to escape the galaxy
     """
     #read in the data file
     cube = fits_read_in(data_filename)
