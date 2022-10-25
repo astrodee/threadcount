@@ -522,9 +522,9 @@ def plot_data_minus_gal(wave, spec, residuals, gal_dict, i, j):
     model_interp = np.interp(model_x, wave[model_mask], gal_gauss[model_mask]+flow_gauss[model_mask]+const[i,j])
 
     #plot the things
-    plt.figure()
+    fig = plt.figure()
 
-    plt.step(wave, cube.data[:,i,j], where='mid', c='k', label='data')
+    plt.step(wave, spec, where='mid', c='k', label='data')
 
     plt.step(wave, gal_gauss+const[i,j], where='mid', c='g', ls='--', label='galaxy gaussian')
     plt.step(wave, flow_gauss+const[i,j], where='mid', c='b', ls='--', label='outflow gaussian')
@@ -532,17 +532,86 @@ def plot_data_minus_gal(wave, spec, residuals, gal_dict, i, j):
     #plt.plot(wave, gal_gauss+flow_gauss+const[i,j], c='grey', ls=':', label='model fit')
     plt.plot(model_x, model_interp, c='grey', ls=':', label='total model fit')
 
-    plt.step(wave, residuals[:,i,j], where='mid', c='r', label='data - galaxy')
+    #plt.step(wave, residuals, where='mid', c='r', label='data - galaxy')
 
     plt.xlim(gal_center[i,j]-10, gal_center[i,j]+10)
 
+    plt.xlabel('Wavelength [$\AA$]')
+
     plt.title('Data and Galaxy Gaussian-subtracted residual ('+str(i)+', '+str(j)+')')
 
-    plt.legend()
+    plt.legend(fontsize='small', frameon=False)
 
-    plt.show()
+    #plt.show()
+
+    return fig
 
 
+def plot_residuals_vel_space(vel_vec, spec, residuals, gal_sigma_vel, v_esc=300, v_end=600):
+    """
+    Plots the data and the residuals in velocity space with the three velocity
+    bands highlighted
+
+    Parameters
+    ----------
+    wave : :obj:'~numpy.ndarray'
+        wavelength vector
+    spec : :obj:'~numpy.ndarray'
+        the spectrum (same length as wave)
+    residuals : :obj:'~numpy.ndarray'
+        the residuals from spec - Gaussian (same length as wave)
+    gal_sigma_vel : float
+        the average disk velocity dispersion for the galaxy
+    v_esc : float, optional
+        the escape velocity of the galaxy (Default = 300)
+    v_end : float, optional
+        the velocity where the emission line flux disappears into the continuum
+        noise (Default=600)
+
+    Returns
+    -------
+    :obj:`matplotlib.figure.Figure`
+        a plot of the residuals from the data - Gaussian in velocity space with
+        the three velocity bands highlighted
+    """
+    #calculate the standard deviation of the continuum
+    threshold = np.nanstd(spec.subspec(lmin=4700, lmax=4800).data)
+
+    #make the plot
+    fig = plt.figure()
+
+    plt.axhspan(-threshold, threshold, color='grey', alpha=0.3, label='Noise Level')
+
+    plt.step(vel_vec, spec.data, where='mid', c='k', label='data')
+
+    plt.step(vel_vec, residuals.data, where='mid', c='r', label='residuals')
+
+    #plot where the escape velocity and sigma values are
+    plt.axvspan(-gal_sigma_vel, gal_sigma_vel, color='blue', alpha=0.3, label='Within the disk')
+
+    if v_end > v_esc:
+        plt.axvspan(-v_esc, -gal_sigma_vel, color='green', alpha=0.3, label='Fountain Gas')
+        plt.axvspan(-v_end, -v_esc, color='yellow', alpha=0.3, label=r'Above $v_{esc}=$'+f' {v_esc:.2f}km/s')
+    else:
+        plt.axvspan(-v_end, -gal_sigma_vel, color='green', alpha=0.3, label='Truncated Mid Velocity')
+
+    plt.axvline(0, c='grey', ls=':')
+
+    print(gal_sigma_vel)
+
+    plt.axvline(-gal_sigma_vel, c='grey', ls=':')
+
+    plt.axvline(-v_esc, c='grey', ls=':')
+
+    plt.xlim(-1000, 1000)
+
+    plt.xlabel('Velocity [km/s]')
+
+    plt.title('Data and Galaxy Gaussian-subtracted residual in Velocity Space')
+
+    plt.legend(fontsize='small', frameon=False)
+
+    return fig
 
 
 
