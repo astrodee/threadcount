@@ -690,28 +690,162 @@ def main(data_filename, tc_filename, this_baseline_range=[], baseline_fit_type=N
     #get the constant values
     const, const_err = gal_dict['avg_c'], gal_dict['avg_c_err']
 
-    #create a subcube with a shorter wavelength range
-    subcube = create_subcube(cube)
-
     #iterating through the data array
-    for i in np.arange(sub_cube.data.shape[1]):
-        for j in np.arange(sub_cube.data.shape[2]):
-            this_spec = sub_cube[:,i,j]
+    for i in np.arange(subcube.data.shape[1]):
+        for j in np.arange(subcube.data.shape[2]):
+            this_spec = subcube[:,i,j]
 
             #subtract the baseline from the data
             if baseline_fit_type is not None:
+                this_baseline_range = baseline_fit_range[0]
                 baseline_fit, new_spec = subtract_baseline(this_spec, this_baseline_range, baseline_fit_type)
-                this_spec = new_spec
+                this_spec.data = new_spec
 
             #subtract the gaussian from the data
-            residuals[:,i,j] = subtract_gaussian(cube.wave.coord(), cube.data[:,i,j], gal_height[i,j], gal_center[i,j], gal_sigma[i,j], const=const[i,j])
+            residuals.data[:,i,j] = subtract_gaussian(this_spec.wave.coord(), this_spec, gal_height[i,j], gal_center[i,j], gal_sigma[i,j], const=const[i,j])
 
             #transform from wavelength to velocity space
-            vel_vecs[:,i,j] = wave_to_vel(cube.wave.coord(), gal_center[i,j])
+            #vel_vecs[:,i,j] = wave_to_vel(this_spec.wave.coord(), gal_center[i,j])
+            vel_vec = wave_to_vel(this_spec.wave.coord(), gal_center[i,j])
+
+            #calculate the galaxy velocity dispersion
+            #gal_sigma_vel[i,j] = sigma_to_vel_disp(gal_sigma[i,j], gal_center[i,j]).value
+
+            #calculate where the residual disappears into the noise
+            #need to use pre-baseline subtracted data
+            #v_ends[i,j] = abs(determine_v_end(vel_vec, subcube[:,i,j], residuals[:,i,j]).value)
+            v_end = abs(determine_v_end(vel_vec, subcube[:,i,j], residuals.data[:,i,j]).value)
+
+            #do the flux calculation
+            disk_turb_flux[i,j], fountain_flux[i,j], escape_flux[i,j] = get_velocity_bands(vel_vec.value, this_spec.wave.coord(), residuals.data[:,i,j], disk_sigma.value, v_esc=v_esc.value, v_end=v_end)
+
+    #give the arrays units
+    disk_turb_flux = disk_turb_flux * units.Angstrom *units.erg/(units.Angstrom*units.cm**2*units.s)
+    fountain_flux = fountain_flux * units.Angstrom *units.erg/(units.Angstrom*units.cm**2*units.s)
+    escape_flux = escape_flux * units.Angstrom *units.erg/(units.Angstrom*units.cm**2*units.s)
+
+    #return residuals, vel_vecs
+    return residuals, disk_turb_flux, fountain_flux, escape_flux
+
+
+def main_one_spaxel(data_filename, tc_filename, i, j, baseline_fit_range=[], baseline_fit_type='quadratic', v_esc=300*units.km/units.s, disk_sigma=60*units.km/units.s,  line=lines.L_Hb4861):
+    """
+    Runs the whole thing for just one spaxel (i,j), does some plotting of:
+        1. the baseline fit subtraction
+        2. the threadcount model fit
+        3. the residuals and velocity bands in velocity space
+
+    Parameters
+    ----------
+    data_filename : str
+        The file name and location of the data fits file with data in extension
+        0 and variance in extension 1
+    tc_filename : str
+        The file name and location of where the threadcount dictionary results
+        were saved
+    i : int
+        The x-index of the location of the spaxel
+    j : int
+        The y-index of the location of the spaxel
+    baseline_fit_range : list [[[float, float], [float, float]]], optional
+        The range of wavelengths to use in the baseline subtraction.  A list of
+        [[[left_begin, left_end], [right_begin, right_end]]]
+        If baseline_fit_type is not None, this NEEDS TO BE INCLUDED.
+    baseline_fit_type : str, optional
+        The type of fit to do to the baseline to subtract leftover continuum.
+        Options are "quadratic", "linear" or None
+        If this is not None, MUST include this_baseline_range parameter.
+    v_esc : float, :obj: `astropy.units.quantity.Quantity`
+        The escape velocity in km/s (includes the units)
+        Default is 300 km/s
+    disk_sigma : float, :obj: `astropy.units.quantity.Quantity`
+        The average disk velocity dispersion in km/s (includes the units)
+        Default is 60 km/s
+    line : :obj: `threadcount.lines.Line`
+        A threadcount emission line object with the information about line centre,
+        line name, etc.
+
+    Returns
+    -------
+    Three plots in interactive mode, and the following objects:
+
+    residuals : :obj:`mpdaf.obj.spectrum.Spectrum`
+        The residuals from the data - Gaussian subtraction
+    disk_turb_flux : float
+        Emission line flux from gas which is likely remaining within the galaxy
+        disk
+    fountain_flux : float
+        Flux from gas which is likely above the plane of the galaxy, but not
+        reaching high enough velocities to escape
+    escape_flux : float
+        Flux from gas which is likely reaching velocities that enable it to escape
+        the galaxy
+    """
+    #read in the data file
+    cube = fits_read_in(data_filename)
+
+    #read in the threadcount results
+    gal_dict, wcs_step, z = read_in_threadcount_dict(tc_filename)
+
+    #deredshift the wavelength array
+    cube = get_wave_vector(cube, z=z)
+
+    #create a subcube with a shorter wavelength range
+    subcube = create_subcube(cube, center_wavelength=line.center)
+
+    #get the centre values
+    gal_center, gal_center_err, flow_center, flow_center_err = calc_sfr.get_arrays(gal_dict, var_string='center')
+
+    #get the height values
+    gal_height, gal_height_err, flow_height, flow_height_err = calc_sfr.get_arrays(gal_dict, var_string='height')
+
+    #get the sigma values
+    gal_sigma, gal_sigma_err, flow_sigma, flow_sigma_err = calc_sfr.get_arrays(gal_dict, var_string='sigma')
+
+    #get the constant values
+    const, const_err = gal_dict['avg_c'], gal_dict['avg_c_err']
+
+    #get the one spectrum to act on
+    this_spec = subcube[:,i,j]
+
+    #subtract the baseline from the data
+    if baseline_fit_type is not None:
+        this_baseline_range = baseline_fit_range[0]
+        baseline_fit, new_spec = subtract_baseline(this_spec, this_baseline_range, baseline_fit_type)
+
+        #plot the fit
+        fig1 = fit.plot_baseline(baseline_fit)
+        plt.gca().set_xlim(this_baseline_range[0][0]-5, this_baseline_range[1][1]+5)
+
+        #change the baseline subtracted data to be the data that is used
+        this_spec.data = new_spec
+
+    #subtract the gaussian from the data
+    residuals = this_spec.clone(data_init=np.zeros, var_init=np.zeros)
+    residuals.var = this_spec.var
+    residuals.data[:] = subtract_gaussian(this_spec.wave.coord(), this_spec, gal_height[i,j], gal_center[i,j], gal_sigma[i,j], const=const[i,j])
+
+    #transform from wavelength to velocity space
+    vel_vec = wave_to_vel(this_spec.wave.coord(), gal_center[i,j])
+
+    #calculate the galaxy velocity dispersion
+    #gal_sigma_vel = sigma_to_vel_disp(gal_sigma[i,j], gal_center[i,j])
+
+    #calculate where the residual disappears into the noise
+    #need to use pre-baseline subtracted data
+    v_end = abs(determine_v_end(vel_vec, subcube[:,i,j], residuals).value)
+    print('v_end', v_end)
+
+    #plot the data minus galaxy
+    fig2 = plot_data_minus_gal(this_spec.wave.coord(), this_spec.data, residuals.data, gal_dict, i, j)
+
+    #plot the data and residuals in velocity space
+    fig3 = plot_residuals_vel_space(vel_vec, this_spec, residuals, disk_sigma.value, v_esc=v_esc.value, v_end=v_end)
+
 
     #do the flux calculation
-    disk_turb_flux, fountain_flux = get_velocity_bands(vel_vecs, residuals, gal_center, gal_sigma, v_esc=300)
+    disk_turb_flux, fountain_flux, escape_flux = get_velocity_bands(vel_vec.value, this_spec.wave.coord(), residuals.data, disk_sigma.value, v_esc=v_esc.value, v_end=v_end)
 
 
     #return residuals, vel_vecs
-    return residuals, disk_turb_flux, fountain_flux
+    return residuals, disk_turb_flux, fountain_flux, escape_flux
