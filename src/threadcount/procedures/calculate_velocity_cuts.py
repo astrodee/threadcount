@@ -126,8 +126,8 @@ def extract_from_comments(comment_lines, search_string):
     search_string
     """
     #search_string = "wcs_step:"
-    wcs_line = [x for x in comment_lines if x.startswith(search_string)][0]
-    return eval(wcs_line[len(search_string) :].strip().replace(" ", ","))
+    search_line = [x for x in comment_lines if x.startswith(search_string)][0]
+    return eval(search_line[len(search_string) :].strip().replace(" ", ","))
 
 #-------------------------------------------------------------------------------
 # SUBTRACT BASELINE
