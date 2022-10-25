@@ -189,7 +189,7 @@ def subtract_baseline(spec, this_baseline_range, baseline_fit_type):
     #subtract the best fit from the data
     new_spec = spec.data - baseline_fit.best_fit
 
-    return baseline_fit.best_fit, new_spec
+    return baseline_fit, new_spec
 
 
 
@@ -267,11 +267,7 @@ def wave_to_vel(wave, center):
 
     return vel_vector
 
-#-------------------------------------------------------------------------------
-# VELOCITY BANDS
-#-------------------------------------------------------------------------------
-
-def get_velocity_bands(vel_vec, residuals, gal_center, gal_sigma, v_esc):
+def sigma_to_vel_disp(gal_sigma, gal_center):
     """
     Converts the sigma from the fits to the velocity dispersion
 
@@ -620,7 +616,7 @@ def plot_residuals_vel_space(vel_vec, spec, residuals, gal_sigma_vel, v_esc=300,
 # MAIN
 #-------------------------------------------------------------------------------
 
-def main(data_filename, tc_filename, this_baseline_range=[], baseline_fit_type=None, v_esc=300*units.km/units.s, disk_sigma=60*units.km/units.s, line=lines.L_Hb4861):
+def main(data_filename, tc_filename, baseline_fit_range=[], baseline_fit_type=None, v_esc=300*units.km/units.s, disk_sigma=60*units.km/units.s, line=lines.L_Hb4861):
     """
     Runs the whole thing
 
@@ -673,10 +669,24 @@ def main(data_filename, tc_filename, this_baseline_range=[], baseline_fit_type=N
     #deredshift the wavelength array
     cube = get_wave_vector(cube, z=z)
 
+    #create a subcube with a shorter wavelength range
+    subcube = create_subcube(cube, center_wavelength=line.center)
+
     #create an array to put the gaussian-subtracted data in
+    #residuals = np.zeros_like(subcube.data)
+    #by cloning the subcube - creates a new object with the same shape and
+    #coordinates as the subcube, but the .data and .var arrays are set to None
+    #by default.
+    residuals = subcube.clone(data_init=np.zeros, var_init=np.zeros)
+    residuals.var[:,:,:] = subcube.var
     #and the velocity vectors
-    residuals = np.zeros_like(cube.data)
-    vel_vecs = np.zeros((cube.data.shape[0], cube.data.shape[1], cube.data.shape[2]))
+    #vel_vecs = np.zeros((subcube.data.shape[0], subcube.data.shape[1], subcube.data.shape[2]))
+    #gal_sigma_vel = np.zeros((subcube.data.shape[1], subcube.data.shape[2]))
+    #v_ends = np.zeros((subcube.data.shape[1], subcube.data.shape[2]))
+
+    disk_turb_flux = np.zeros_like(subcube[0,:,:].data)
+    fountain_flux = np.zeros_like(subcube[0,:,:].data)
+    escape_flux = np.zeros_like(subcube[0,:,:].data)
 
     #get the centre values
     gal_center, gal_center_err, flow_center, flow_center_err = calc_sfr.get_arrays(gal_dict, var_string='center')
