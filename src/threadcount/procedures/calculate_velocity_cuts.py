@@ -628,9 +628,9 @@ def main(data_filename, tc_filename, baseline_fit_range=[], baseline_fit_type=No
     tc_filename : str
         The file name and location of where the threadcount dictionary results
         were saved
-    this_baseline_range : list [[float, float], [float, float]], optional
+    baseline_fit_range : list [[[float, float], [float, float]]], optional
         The range of wavelengths to use in the baseline subtraction.  A list of
-        [[left_begin, left_end], [right_begin, right_end]]
+        [[[left_begin, left_end], [right_begin, right_end]]]
         If baseline_fit_type is not None, this NEEDS TO BE INCLUDED.
     baseline_fit_type : str, optional
         The type of fit to do to the baseline to subtract leftover continuum.
