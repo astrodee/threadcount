@@ -333,27 +333,148 @@ def get_velocity_bands(vel_vec, wave, residuals, gal_sigma_vel, v_esc, v_end):
     """
     #Disk Turbulence
     #add up everything between vel=0 and vel=gal_sigma
-    disk_turb_mask = (vel_vec > -gal_sigma_vel.value) & (vel_vec < gal_sigma_vel.value)
+    disk_turb_mask = (vel_vec > -gal_sigma_vel) & (vel_vec < gal_sigma_vel)
     residuals_masked = ma.masked_where(~disk_turb_mask, residuals)
-    disk_turb_flux = np.nansum(residuals_masked, axis=0)
+    try:
+        dlam = (wave[disk_turb_mask][-1] - wave[disk_turb_mask][0])
+    except IndexError:
+        dlam = 0*units.Angstrom
+    disk_turb_flux = np.nansum(residuals_masked, axis=0)*dlam
 
-    #Fountain Gas
-    #add up everything between vel=gal_sigma and vel=escape vel
-    fountain_mask = (vel_vec < -gal_sigma_vel.value) & (vel_vec > -v_esc)
-    residuals_masked = ma.masked_where(~fountain_mask, residuals)
-    fountain_flux = np.nansum(residuals_masked, axis=0)
+    #if the flux disappears into the noise after the escape velocity
+    if v_end > v_esc:
+        #Fountain Gas
+        #add up everything between vel=gal_sigma and vel=escape vel
+        fountain_mask = (vel_vec < -gal_sigma_vel) & (vel_vec > -v_esc)
+        residuals_masked = ma.masked_where(~fountain_mask, residuals)
+        try:
+            dlam = (wave[fountain_mask][-1] - wave[fountain_mask][0])
+        except IndexError:
+            dlam = 0*units.Angstrom
+        fountain_flux = np.nansum(residuals_masked, axis=0)*dlam
 
-    #Escaping gas
-    #add up everything between the escape velocity and where the flux reaches the standard deviation
-    #escape_mask = (vel_vec.value<-v_esc) & ()
+        #Escaping gas
+        #add up everything between the escape velocity and where the flux reaches
+        #the noise level
+        escape_mask = (vel_vec < -v_esc) & (vel_vec > -v_end)
+        residuals_masked = ma.masked_where(~escape_mask, residuals)
+        try:
+            dlam = (wave[escape_mask][-1] - wave[escape_mask][0])
+        except IndexError:
+            dlam = 0
+        escape_flux = np.nansum(residuals_masked, axis=0)*dlam
 
-    return disk_turb_flux, fountain_flux
+    #otherwise, we need to truncate the fountain gas and set the escape flux
+    #to zero
+    else:
+        #Fountain Gas
+        #add up everything between vel=gal_sigma and vel=end vel
+        fountain_mask = (vel_vec < -gal_sigma_vel) & (vel_vec > -v_end)
+        residuals_masked = ma.masked_where(~fountain_mask, residuals)
+        try:
+            dlam = (wave[fountain_mask][-1] - wave[fountain_mask][0])
+        except IndexError:
+            dlam = 0
+        fountain_flux = np.nansum(residuals_masked, axis=0)*dlam
 
+        #Escaping gas
+        #add up everything between the escape velocity and where the flux reaches the standard deviation
+        escape_flux = 0.0
+
+    return disk_turb_flux, fountain_flux, escape_flux
+
+
+def determine_v_end(vel_vec, spec, residuals):
+    """
+    Finds where the residuals reach the same level as the noise
+    Returns the velocity at which this happens
+
+    Parameters
+    ----------
+    vel_vec : :obj:'~numpy.ndarray'
+        Vector of wavelengths
+    spec : `mpdaf.obj.spectrum.Spectrum`
+        An mpdaf spectrum with the data
+        This should be from BEFORE any extra baseline subtraction has taken place
+        since it is used to find the standard deviation of the continuum, and
+        the baseline subtraction alters the shape of the continuum away from the
+        emission line.
+    residuals : :obj:'~numpy.ndarray'
+        The residual array
+
+    Return
+    ------
+    v_end : float
+        the velocity at which the flux residuals reach the same level as the noise
+    """
+    #check if the residuals are a fully masked array
+    if residuals.mask.all() == True:
+        v_end = 0.0 * (units.km/units.s)
+
+    else:
+        #calculate the standard deviation of the continuum
+        threshold = np.nanstd(spec.subspec(lmin=4700, lmax=4800).data)
+
+        #find where the residual falls below this threshold
+        below_threshold = residuals.data < threshold
+
+        #find for which velocities this is true on the blue side
+        vels_below_threshold = vel_vec[(vel_vec<0) & (below_threshold)]
+
+        #find the maximum
+        try:
+            v_end = np.nanmax(vels_below_threshold, axis=0) * (units.km/units.s)
+        except ValueError:
+            v_end = 0.0 * (units.km/units.s)
+        #v_end = np.nanmax(vels_below_threshold, axis=0) * (units.km/units.s)
+
+    return v_end
+
+def calculate_escape_velocity(radius, mass, z):
+    """
+    Calculates the escape velocity given a radius and mass
+        v_esc = sqrt(2 G M / r)
+
+    Parameters
+    ----------
+    radius : float
+        The radius of the galaxy in arcseconds (but without units)
+        Usually put in the effective radius, but could use any radius
+    mass : float
+        The mass of the galaxy in solar masses (without units)
+        Usually use the stellar mass
+    z : float
+        The redshift (used to convert the radius from arcseconds to kpc)
+
+    Returns
+    -------
+    v_esc : astropy.units.quantity.Quantity
+        The escape velocity in km/s (includes the units)
+    """
+    #give mass units
+    mass = mass * units.solMass
+
+    #give the radius units
+    radius = radius * units.arcsec
+
+    #convert to kpc
+    #get the proper distance per arcsecond
+    proper_dist = cosmo.kpc_proper_per_arcmin(z).to(units.kpc/units.arcsec)
+    radius = radius * proper_dist
+    print("radius for escape velocity:", radius)
+
+    #calculate the escape velocity
+    v_esc = np.sqrt(2*G*mass/radius)
+
+    #convert to km/s
+    v_esc = v_esc.to('km/s')
+
+    return v_esc
 #-------------------------------------------------------------------------------
 # PLOTS
 #-------------------------------------------------------------------------------
 
-def plot_data_minus_gal(wave, cube, residuals, gal_dict, i, j):
+def plot_data_minus_gal(wave, spec, residuals, gal_dict, i, j):
     """
     Plot of the two gaussian fit, and the residuals for spaxel (i,j)
 
