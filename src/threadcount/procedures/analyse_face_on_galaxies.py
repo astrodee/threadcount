@@ -122,8 +122,7 @@ def run(user_settings):
     print('escape velocity:', s.escape_velocity)
     print('average disk sigma:', s.average_disk_sigma)
 
-    #run the velocity cuts method
-    residuals, disk_turb_flux, fountain_flux, escape_flux = calc_vc.main(
+    residuals, vel_cuts_dict = calc_vc.main(
         data_filename = s.data_filename,
         tc_filename = s.two_gauss_mc_input_file,
         baseline_fit_range = s.baseline_fit_range,
@@ -133,57 +132,28 @@ def run(user_settings):
     #print some stuff
     print('Residuals type', type(residuals))
     print('Residuals shape', residuals.shape)
-    print('Fountain flux shape', fountain_flux.shape)
-    print('Escape flux shape', escape_flux.shape)
+    print('Fountain flux shape', vel_cuts_dict['low_velocity_outflow'].shape)
+    print('Escape flux shape', vel_cuts_dict['high_velocity_outflow'].shape)
 
     #save the results - OVERWRITES ANY EXISTING FILES
     residuals.write(s.output_base_name+'_'+str(s.line.center)+'_residuals.fits')
 
-    if type(disk_turb_flux) == units.quantity.Quantity:
-        header = "unit: 1e-16 "+str(disk_turb_flux.unit)
-        np.savetxt(
-            s.output_base_name+'_'+str(s.line.center)+'_disk_turbulence_flux.txt',
-            disk_turb_flux.value,
-            header=header
-            )
-    else:
-        np.savetxt(
-            s.output_base_name+'_'+str(s.line.center)+'_disk_turbulence_flux.txt',
-            disk_turb_flux
-            )
-
-    if type(fountain_flux) == units.quantity.Quantity:
-        header = "unit: 1e-16 "+str(fountain_flux.unit)
-        np.savetxt(
-            s.output_base_name+'_'+str(s.line.center)+'_fountain_gas_flux.txt',
-            fountain_flux.value,
-            header=header
-            )
-    else:
-        np.savetxt(
-            s.output_base_name+'_'+str(s.line.center)+'_fountain_gas_flux.txt',
-            fountain_flux
-            )
-
-    if type(escape_flux) == units.quantity.Quantity:
-        header = "unit: 1e-16 "+str(escape_flux.unit)
-        np.savetxt(
-            s.output_base_name+'_'+str(s.line.center)+'_escaping_gas_flux.txt',
-            escape_flux.value,
-            header=header
-            )
-    else:
-        np.savetxt(
-            s.output_base_name+'_'+str(s.line.center)+'_escaping_gas_flux.txt',
-            escape_flux
-            )
+    vel_cuts_dict.savetxt(s.output_base_name+'_'+str(s.line.center)+'_vel_cuts_dict.txt')
 
     #run through the plotting scripts
     if s.plot_results == True:
         #read in the threadcount results
         tc_data, wcs_step, z = calc_vc.read_in_threadcount_dict(s.two_gauss_mc_input_file)
 
-        fig = plot_velocity_cut_maps(fountain_flux, escape_flux, tc_data, v_esc=s.escape_velocity, disk_sigma=s.average_disk_sigma, title=s.gal_name+' '+s.line.label, wcs_step=wcs_step)
+        #read in the data file
+        cube = calc_vc.fits_read_in(s.data_filename)
+
+        #calculate the noise cube
+        #get the spectral pixel indexes of wavelengths
+        k1, k2 = cube.wave.pixel([4700, 4800], nearest=True)
+        noise = np.nanstd(cube.data[k1:k2+1, :, :], axis=0)
+
+        fig = plot_velocity_cut_maps(vel_cuts_dict['low_velocity_outflow'], vel_cuts_dict['high_velocity_outflow'], tc_data, noise, v_esc=s.escape_velocity, disk_sigma=s.average_disk_sigma, title=s.gal_name+' '+s.line.label, wcs_step=wcs_step, crop_data=s.crop_data)
 
         plt.show(block=False)
 
