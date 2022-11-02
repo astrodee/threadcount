@@ -60,6 +60,9 @@ def run(user_settings):
         # output options
         "output_base_name" : "ex_velocity_cuts_results", # saved files will begin with this
         "plot_results" : True, #boolean
+        "crop_data" : None, # Use to define how much of the data goes into the maps in the
+        # format: [axis1_begin, axis1_end, axis2_begin, axis2_end] or None
+        # e.g. [2, -1, 3, -2] will map data[2:-1, 3:-2]
     }
     # s for settings
     s = tc.fit.process_settings_dict(default_settings, user_settings)
@@ -446,42 +449,83 @@ def calc_average_disk_height(gal_dict, sigma_star):
 # PLOTS
 #-------------------------------------------------------------------------------
 
-def plot_velocity_cut_maps(mid_velocity_array, high_velocity_array, gal_dict, v_esc=300, disk_sigma=60, title='Gal Name Line', wcs_step=[1,1]):
+def plot_velocity_cut_maps(mid_velocity_array, high_velocity_array, gal_dict, noise, v_esc=300, disk_sigma=60, title='Gal Name Line', wcs_step=[1,1], crop_data=None):
     """
     Makes maps of the velocity cuts
+
+    Parameters
+    ----------
+
+    crop_data : list of ints or None
+        Use to define how much of the data goes into the maps in the format:
+        [axis1_begin, axis1_end, axis2_begin, axis2_end]
+        e.g. [2, -1, 3, -2] will map data[2:-1, 3:-2]
     """
     #get the flux values
     gal_flux, gal_flux_err, flow_flux, flow_flux_err = calc_sfr.get_arrays(gal_dict, var_string='flux')
 
     #low_vel_masked = ma.masked_where(low_velocity_array<0, low_velocity_array)
-    mid_vel_masked = ma.masked_where(mid_velocity_array<0, mid_velocity_array.value)
-    high_vel_masked = ma.masked_where(high_velocity_array<0, high_velocity_array.value)
+    try:
+        mid_vel_masked = ma.masked_where(mid_velocity_array<0, mid_velocity_array.value)
+    except AttributeError:
+        mid_vel_masked = ma.masked_where(mid_velocity_array<0, mid_velocity_array)
+    try:
+        high_vel_masked = ma.masked_where(high_velocity_array<0, high_velocity_array.value)
+    except AttributeError:
+        high_vel_masked = ma.masked_where(high_velocity_array<0, high_velocity_array)
+
+    #crop the data
+    if crop_data:
+        noise = noise[crop_data[0]:crop_data[1], crop_data[2]:crop_data[3]]
+        gal_flux = gal_flux[crop_data[0]:crop_data[1], crop_data[2]:crop_data[3]]
+        flow_flux = flow_flux[crop_data[0]:crop_data[1], crop_data[2]:crop_data[3]]
+        mid_vel_masked = mid_vel_masked[crop_data[0]:crop_data[1], crop_data[2]:crop_data[3]]
+        high_vel_masked = high_vel_masked[crop_data[0]:crop_data[1], crop_data[2]:crop_data[3]]
+
+    #do a S/N check
+    #mid_vel_masked
+
+
 
     #fig, ax = plt.subplots(1, 3, figsize=(9,3), constrained_layout=True)
     fig = plt.figure(figsize=(10,2.5), constrained_layout=True)
 
+    #ax1 = plt.subplot(131)
+    #im = ax1.imshow(np.log10(gal_flux.T), origin='lower', aspect=wcs_step[1]/wcs_step[0], cmap='viridis', vmax=4)
+    #ax1.contour(np.log10(gal_flux).T, levels=7, origin='lower', colors='k', alpha=0.8)
+    #ax1.set_title('Galaxy Component Flux', fontsize='small')
+    #cbar = plt.colorbar(im, ax=ax1, shrink=0.6)
+    #cbar.set_label('Log Flux [10$^{-16}$ erg/(cm2 s)]', fontsize='small')
+
     ax1 = plt.subplot(131)
-    im = ax1.imshow(np.log10(gal_flux.T), origin='lower', aspect=wcs_step[1]/wcs_step[0], cmap='viridis', vmax=4)
-    ax1.contour(np.log10(gal_flux).T, levels=7, origin='lower', colors='k', alpha=0.8)
-    ax1.set_title('Galaxy Component Flux', fontsize='small')
-    cbar = plt.colorbar(im, ax=ax1, shrink=0.6)
+    #im = ax1.imshow(np.log10(flow_flux.T), origin='lower', aspect=wcs_step[1]/wcs_step[0], cmap=cmr.cosmic, vmax=2.2)
+    im = ax1.imshow(np.log10(flow_flux.T), origin='lower', aspect=wcs_step[1]/wcs_step[0], cmap='viridis', vmax=2.2, vmin=-0.5)
+    ax1.contour(np.log10(gal_flux).T, levels=[0.6, 1.0, 1.5], origin='lower', colors='k', alpha=0.8)
+    ax1.invert_xaxis()
+    ax1.set_title('Broad Component Flux', fontsize='small')
+    ax1.tick_params(axis='both', which='both', bottom=False, top=False, labelbottom=False, right=False, left=False, labelleft=False)
+    cbar = plt.colorbar(im, ax=ax1, shrink=0.8)
     cbar.set_label('Log Flux [10$^{-16}$ erg/(cm2 s)]', fontsize='small')
 
 
     ax2 = plt.subplot(132)
-    im = ax2.imshow(np.log10(mid_vel_masked.T), origin='lower', aspect=wcs_step[1]/wcs_step[0], cmap=cmr.cosmic)#, vmax=2)
-    ax2.contour(np.log10(gal_flux).T, levels=7, origin='lower', colors='k', alpha=0.8)
-    ax2.set_title('Fountain Flux:\n $\sigma_{disk}=$'+f'{disk_sigma:.2f} < v < '+r'$v_{esc}=$'+f'{v_esc:.2f}', fontsize='small')
-    cbar = plt.colorbar(im, ax=ax2, shrink=0.6)
-    cbar.set_label('Log Flux [10$^{-16}$'+f'{mid_velocity_array.unit}]', fontsize='small')
+    im = ax2.imshow(np.log10(mid_vel_masked.T), origin='lower', aspect=wcs_step[1]/wcs_step[0], cmap='viridis', vmax=2.2, vmin=-0.5)
+    ax2.contour(np.log10(gal_flux).T, levels=[0.6, 1.0, 1.5], origin='lower', colors='k', alpha=0.8)
+    ax2.invert_xaxis()
+    ax2.set_title('$\sigma_{disk}$ < v < $v_{esc}$', fontsize='small')
+    ax2.tick_params(axis='both', which='both', bottom=False, top=False, labelbottom=False, right=False, left=False, labelleft=False)
+    cbar = plt.colorbar(im, ax=ax2, shrink=0.8)
+    cbar.set_label('Log Flux [10$^{-16}$ erg/(cm2 s)]', fontsize='small')
 
 
     ax3 = plt.subplot(133)
-    im = ax3.imshow(np.log10(high_vel_masked.T), origin='lower', aspect=wcs_step[1]/wcs_step[0], cmap=cmr.cosmic,)
-    ax3.contour(np.log10(gal_flux).T, levels=7, origin='lower', colors='k', alpha=0.8)
-    ax3.set_title('Escaping Flux:\n v > $v_{esc}=$'+f'{v_esc:.2f}', fontsize='small')
-    cbar = plt.colorbar(im, ax=ax3, shrink=0.6)
-    cbar.set_label('Log Flux [10$^{-16}$'+f'{high_velocity_array.unit}]', fontsize='small')
+    im = ax3.imshow(np.log10(high_vel_masked.T), origin='lower', aspect=wcs_step[1]/wcs_step[0], cmap='viridis', vmax=2.2, vmin=-0.5)
+    ax3.contour(np.log10(gal_flux).T, levels=[0.6, 1.0, 1.5], origin='lower', colors='k', alpha=0.8)
+    ax3.invert_xaxis()
+    ax3.set_title('v > $v_{esc}$', fontsize='small')
+    ax3.tick_params(axis='both', which='both', bottom=False, top=False, labelbottom=False, right=False, left=False, labelleft=False)
+    cbar = plt.colorbar(im, ax=ax3, shrink=0.8)
+    cbar.set_label('Log Flux [10$^{-16}$ erg/(cm2 s)]', fontsize='small')
 
 
     plt.suptitle(title)
