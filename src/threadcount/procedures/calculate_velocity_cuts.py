@@ -294,6 +294,51 @@ def sigma_to_vel_disp(gal_sigma, gal_center):
 # VELOCITY BANDS
 #-------------------------------------------------------------------------------
 
+def get_velocity_band_flux(vel_vec, wave, residuals, vel_start, vel_end, average_noise):
+    """
+    Gets the flux in a velocity band using the residuals from a single emission
+    line, from vel_start to vel_end
+    e.g. for the "Fountain gas" this will be from gal_sigma_vel to v_esc
+
+    Parameters
+    ----------
+    vel_vec : :obj:'~numpy.ndarray'
+        Vector of velocities
+    wave : :obj:'~numpy.ndarray'
+        Vector of wavelengths
+    residuals : :obj:'~numpy.ndarray'
+        Vector of residuals (make sure this is the numpy array, not the
+        :class:`mpdaf.obj.spectrum.Spectrum` object)
+    vel_start : float
+        The start velocity of the band
+    vel_end : float
+        The end velocity of the band
+
+    Returns
+    -------
+    vel_band_flux : float
+        Emission line flux from gas within the velocity band
+    vel_band_sn : float
+        The signal to noise of the velocity band
+    """
+    #mask flux not in the velocity band
+    vel_band_mask = (vel_vec < -vel_start) & (vel_vec > -vel_end)
+    residuals_masked = ma.masked_where(~vel_band_mask, residuals)
+
+    #get the wavelength range we're integrating over
+    try:
+        dlam = (wave[vel_band_mask][-1] - wave[vel_band_mask][0])
+    except IndexError:
+        dlam = 0*units.Angstrom
+
+    #add up everything between vel=vel_start and vel=vel_end
+    vel_band_flux = np.nansum(residuals_masked, axis=0)*dlam
+
+    #get the median value and divide by noise to get S/N
+    vel_band_sn = np.nanmedian(residuals_masked, axis=0)/average_noise
+
+    return vel_band_flux, vel_band_sn
+
 def get_velocity_bands(vel_vec, wave, residuals, gal_sigma_vel, v_esc, v_end):
     """
     Gets the flux in each velocity band (disk, fountain and escaping) from a
@@ -679,14 +724,17 @@ def main(data_filename, tc_filename, baseline_fit_range=[], baseline_fit_type=No
     #by default.
     residuals = subcube.clone(data_init=np.zeros, var_init=np.zeros)
     residuals.var[:,:,:] = subcube.var
-    #and the velocity vectors
-    #vel_vecs = np.zeros((subcube.data.shape[0], subcube.data.shape[1], subcube.data.shape[2]))
-    #gal_sigma_vel = np.zeros((subcube.data.shape[1], subcube.data.shape[2]))
-    #v_ends = np.zeros((subcube.data.shape[1], subcube.data.shape[2]))
+
+    total_residual_flux = np.zeros_like(subcube[0,:,:].data)
+    total_residual_sn = np.zeros_like(subcube[0,:,:].data)
 
     disk_turb_flux = np.zeros_like(subcube[0,:,:].data)
     fountain_flux = np.zeros_like(subcube[0,:,:].data)
     escape_flux = np.zeros_like(subcube[0,:,:].data)
+
+    disk_turb_sn = np.zeros_like(subcube[0,:,:].data)
+    fountain_sn = np.zeros_like(subcube[0,:,:].data)
+    escape_sn = np.zeros_like(subcube[0,:,:].data)
 
     #get the centre values
     gal_center, gal_center_err, flow_center, flow_center_err = calc_sfr.get_arrays(gal_dict, var_string='center')
@@ -715,11 +763,7 @@ def main(data_filename, tc_filename, baseline_fit_range=[], baseline_fit_type=No
             residuals.data[:,i,j] = subtract_gaussian(this_spec.wave.coord(), this_spec, gal_height[i,j], gal_center[i,j], gal_sigma[i,j], const=const[i,j])
 
             #transform from wavelength to velocity space
-            #vel_vecs[:,i,j] = wave_to_vel(this_spec.wave.coord(), gal_center[i,j])
             vel_vec = wave_to_vel(this_spec.wave.coord(), gal_center[i,j])
-
-            #calculate the galaxy velocity dispersion
-            #gal_sigma_vel[i,j] = sigma_to_vel_disp(gal_sigma[i,j], gal_center[i,j]).value
 
             #calculate where the residual disappears into the noise
             #need to use pre-baseline subtracted data
@@ -729,13 +773,37 @@ def main(data_filename, tc_filename, baseline_fit_range=[], baseline_fit_type=No
             #do the flux calculation
             disk_turb_flux[i,j], fountain_flux[i,j], escape_flux[i,j] = get_velocity_bands(vel_vec.value, this_spec.wave.coord(), residuals.data[:,i,j], disk_sigma.value, v_esc=v_esc.value, v_end=v_end)
 
-    #give the arrays units
-    disk_turb_flux = disk_turb_flux * units.Angstrom *units.erg/(units.Angstrom*units.cm**2*units.s)
-    fountain_flux = fountain_flux * units.Angstrom *units.erg/(units.Angstrom*units.cm**2*units.s)
-    escape_flux = escape_flux * units.Angstrom *units.erg/(units.Angstrom*units.cm**2*units.s)
+            disk_turb_flux[i,j], disk_turb_sn[i,j] = get_velocity_band_flux(vel_vec.value, this_spec.wave.coord(), residuals.data[:,i,j], disk_sigma.value, -disk_sigma.value, average_noise)
 
-    #return residuals, vel_vecs
-    return residuals, disk_turb_flux, fountain_flux, escape_flux
+            total_residual_flux[i,j], total_residual_sn[i,j] = get_velocity_band_flux(vel_vec.value, this_spec.wave.coord(), residuals.data[:,i,j], total_vel_start.value, v_end.value, average_noise)
+
+            #if the flux disappears into the noise after v_esc
+            if v_end.value > v_esc.value:
+                fountain_flux[i,j], fountain_sn[i,j] = get_velocity_band_flux(vel_vec.value, this_spec.wave.coord(), residuals.data[:,i,j], disk_sigma.value, v_esc.value, average_noise)
+
+                escape_flux[i,j], escape_sn[i,j] = get_velocity_band_flux(vel_vec.value, this_spec.wave.coord(), residuals.data[:,i,j], v_esc.value, v_end.value, average_noise)
+
+            else:
+                fountain_flux[i,j], fountain_sn[i,j] = get_velocity_band_flux(vel_vec.value, this_spec.wave.coord(), residuals.data[:,i,j], disk_sigma.value, v_end.value, average_noise)
+
+                escape_flux[i,j], escape_sn[i,j] = 0.0, 0.0
+
+    #save the results in a dictionary
+    vel_cuts_dict = fit.ResultDict(data_dict={
+                        "total_residual_flux" : total_residual_flux,
+                        "total_residual_sn" : total_residual_sn,
+                        "disk_flux" : disk_turb_flux,
+                        "disk_residual_sn" : disk_turb_sn,
+                        "low_velocity_outflow" : fountain_flux,
+                        "low_velocity_sn" : fountain_sn,
+                        "high_velocity_outflow" : escape_flux,
+                        "high_velocity_sn" : escape_sn,
+                        },
+                        comment = f"Total residual measured from {total_vel_start:.0g} to v_end\n"+
+                        "units: 10^-16 erg / (cm^2 s)\n"
+                    )
+
+    return residuals, vel_cuts_dict
 
 
 def main_one_spaxel(data_filename, tc_filename, i, j, baseline_fit_range=[], baseline_fit_type='quadratic', v_esc=300*units.km/units.s, disk_sigma=60*units.km/units.s,  line=lines.L_Hb4861):
