@@ -425,7 +425,7 @@ def get_velocity_bands(vel_vec, wave, residuals, gal_sigma_vel, v_esc, v_end):
     return disk_turb_flux, fountain_flux, escape_flux
 
 
-def determine_v_end(vel_vec, spec, residuals):
+def determine_v_end(vel_vec, spec, residuals, gal_sigma_vel=60, noise_level=3.0):
     """
     Finds where the residuals reach the same level as the noise
     Returns the velocity at which this happens
@@ -442,6 +442,10 @@ def determine_v_end(vel_vec, spec, residuals):
         emission line.
     residuals : :obj:'~numpy.ndarray'
         The residual array
+    gal_sigma_vel : float
+        The average velocity dispersion of the galaxy disk
+    noise_level : float
+        The multiple of the noise level to create the threshold
 
     Return
     ------
@@ -450,26 +454,33 @@ def determine_v_end(vel_vec, spec, residuals):
     """
     #check if the residuals are a fully masked array
     if residuals.mask.all() == True:
+        average_noise = np.nanstd(spec.subspec(lmin=4700, lmax=4800).data)
         v_end = 0.0 * (units.km/units.s)
 
     else:
         #calculate the standard deviation of the continuum
-        threshold = np.nanstd(spec.subspec(lmin=4700, lmax=4800).data)
+        average_noise = np.nanstd(spec.subspec(lmin=4700, lmax=4800).data)
+        threshold = noise_level * average_noise
 
         #find where the residual falls below this threshold
         below_threshold = residuals.data < threshold
 
         #find for which velocities this is true on the blue side
-        vels_below_threshold = vel_vec[(vel_vec<0) & (below_threshold)]
+        #vels_below_threshold = vel_vec[(vel_vec<0) & (below_threshold)]
+        vels_below_threshold = vel_vec[(vel_vec < -gal_sigma_vel) & (below_threshold)]
 
         #find the maximum
         try:
             v_end = np.nanmax(vels_below_threshold, axis=0) * (units.km/units.s)
         except ValueError:
             v_end = 0.0 * (units.km/units.s)
-        #v_end = np.nanmax(vels_below_threshold, axis=0) * (units.km/units.s)
 
-    return v_end
+        #if the v_end is larger than 1000km/s, it's almost certainly noise
+        #so make that the upper limit
+        if v_end.value < -1000:
+            v_end = -1000 * (units.km/units.s)
+
+    return v_end, average_noise
 
 def calculate_escape_velocity(radius, mass, z):
     """
@@ -616,7 +627,7 @@ def plot_residuals_vel_space(vel_vec, spec, residuals, gal_sigma_vel, v_esc=300,
         the three velocity bands highlighted
     """
     #calculate the standard deviation of the continuum
-    threshold = np.nanstd(spec.subspec(lmin=4700, lmax=4800).data)
+    threshold = 3*np.nanstd(spec.subspec(lmin=4700, lmax=4800).data)
 
     #make the plot
     fig = plt.figure()
@@ -661,7 +672,7 @@ def plot_residuals_vel_space(vel_vec, spec, residuals, gal_sigma_vel, v_esc=300,
 # MAIN
 #-------------------------------------------------------------------------------
 
-def main(data_filename, tc_filename, baseline_fit_range=[], baseline_fit_type=None, v_esc=300*units.km/units.s, disk_sigma=60*units.km/units.s, line=lines.L_Hb4861):
+def main(data_filename, tc_filename, baseline_fit_range=[], baseline_fit_type=None, v_esc=300*units.km/units.s, disk_sigma=60*units.km/units.s, total_vel_start=0.0*units.km/units.s, line=lines.L_Hb4861):
     """
     Runs the whole thing
 
@@ -687,6 +698,10 @@ def main(data_filename, tc_filename, baseline_fit_range=[], baseline_fit_type=No
     disk_sigma : float, :obj: `astropy.units.quantity.Quantity`
         The average disk velocity dispersion in km/s (includes the units)
         Default is 60 km/s
+    total_vel_start : float, :obj: `astropy.units.quantity.Quantity`
+        The velocity at which to start counting flux for the total residual flux,
+        including units
+        Default is 0.0 km/s.  Could also use the disk_sigma.
     line : :obj: `threadcount.lines.Line`
         A threadcount emission line object with the information about line centre,
         line name, etc.
@@ -767,11 +782,11 @@ def main(data_filename, tc_filename, baseline_fit_range=[], baseline_fit_type=No
 
             #calculate where the residual disappears into the noise
             #need to use pre-baseline subtracted data
-            #v_ends[i,j] = abs(determine_v_end(vel_vec, subcube[:,i,j], residuals[:,i,j]).value)
-            v_end = abs(determine_v_end(vel_vec, subcube[:,i,j], residuals.data[:,i,j]).value)
+            v_end, average_noise = determine_v_end(vel_vec, subcube[:,i,j], residuals.data[:,i,j], gal_sigma_vel=disk_sigma)
+            v_end = abs(v_end)
 
-            #do the flux calculation
-            disk_turb_flux[i,j], fountain_flux[i,j], escape_flux[i,j] = get_velocity_bands(vel_vec.value, this_spec.wave.coord(), residuals.data[:,i,j], disk_sigma.value, v_esc=v_esc.value, v_end=v_end)
+            #do the flux cuts calculation
+            #disk_turb_flux[i,j], fountain_flux[i,j], escape_flux[i,j] = get_velocity_bands(vel_vec.value, this_spec.wave.coord(), residuals.data[:,i,j], disk_sigma.value, v_esc=v_esc.value, v_end=v_end)
 
             disk_turb_flux[i,j], disk_turb_sn[i,j] = get_velocity_band_flux(vel_vec.value, this_spec.wave.coord(), residuals.data[:,i,j], disk_sigma.value, -disk_sigma.value, average_noise)
 
@@ -911,8 +926,7 @@ def main_one_spaxel(data_filename, tc_filename, i, j, baseline_fit_range=[], bas
 
     #calculate where the residual disappears into the noise
     #need to use pre-baseline subtracted data
-    v_end = abs(determine_v_end(vel_vec, subcube[:,i,j], residuals).value)
-    print('v_end', v_end)
+    v_end = abs(determine_v_end(vel_vec, subcube[:,i,j], residuals, gal_sigma_vel=disk_sigma).value)
 
     #plot the data minus galaxy
     fig2 = plot_data_minus_gal(this_spec.wave.coord(), this_spec.data, residuals.data, gal_dict, i, j)
