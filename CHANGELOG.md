@@ -1,7 +1,7 @@
 Changelog
 =========
 
-0.0.2 (23/02/2022)
+0.0.3 (02/11/2022)
 ------------------
 
 ---
@@ -27,6 +27,15 @@ analyze_outflow_extent, Added:
 * remove pdf page containing list of un-fit pixels when plots are saved in procedures/fit_lines.py.
 * Added option to choose which Line is used to set redshift in procedures/open_cube_and_deredshift.py
 * Updated settings name in procedures/open_cube_and_deredshift.py to avoid clash.
+
+* Added a new module to analyse face on galaxies, and apply the velocity_cuts
+procedures.  Included files:
+  * procedures/analyse_face_on_galaxies.py
+  * procedures/calculate_mass_outflow.py
+  * procedures/calculate_outflow_velocity.py
+  * procedures/calculate_star_formation_rate.py
+  * procedures/calculate_velocity_cuts.py
+
 
 ### Bug fixes:
 
