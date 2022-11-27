@@ -35,6 +35,8 @@ def run(user_settings):
         "two_gauss_mc_input_file" : "ex_4861_mc_best_fit.txt",
         "gal_name" : "example_galaxy_name", #used for labelling plots
         "z" : 0.03, # redshift
+        "monitor_pixels" : [], # pixels to monitor - if this has length greater
+        #than zero, then only these fits are created, and the plots are shown
         # now for some default fitting details
         "line" : tc.lines.L_Hb4861,
         "baseline_subtract" : None, # baseline can be "quadratic" or "linear" or None
@@ -124,16 +126,30 @@ def run(user_settings):
     print('escape velocity:', s.escape_velocity)
     print('average disk sigma:', s.average_disk_sigma)
 
-    residuals, vel_cuts_dict = calc_vc.main(
-        data_filename = s.data_filename,
-        tc_filename = s.two_gauss_mc_input_file,
-        baseline_fit_range = s.baseline_fit_range,
-        baseline_fit_type = s.baseline_subtract,
-        v_esc = s.escape_velocity, disk_sigma=s.average_disk_sigma, line=s.line)
+    if len(s.monitor_pixels) == 0:
+        residuals, vel_cuts_dict = calc_vc.main(
+            cube = s.cube,
+            tc_filename = s.two_gauss_mc_input_file,
+            baseline_fit_range = s.baseline_fit_range,
+            baseline_fit_type = s.baseline_subtract,
+            v_esc = s.escape_velocity, disk_sigma=s.average_disk_sigma, line=s.line)
+    else:
+
+        for pix in s.monitor_pixels:
+            residuals, disk_turb_flux, fountain_flux, escape_flux = calc_vc.main_one_spaxel(
+                cube = s.cube,
+                tc_filename = s.two_gauss_mc_input_file,
+                i = pix[0],
+                j = pix[1],
+                baseline_fit_range = s.baseline_fit_range,
+                baseline_fit_type = s.baseline_subtract,
+                v_esc = s.escape_velocity, disk_sigma=s.average_disk_sigma, line=s.line)
+
 
     #print some stuff
     print('Residuals type', type(residuals))
     print('Residuals shape', residuals.shape)
+    print('Fountain flux type', type(vel_cuts_dict['low_velocity_outflow']))
     print('Fountain flux shape', vel_cuts_dict['low_velocity_outflow'].shape)
     print('Escape flux shape', vel_cuts_dict['high_velocity_outflow'].shape)
 
