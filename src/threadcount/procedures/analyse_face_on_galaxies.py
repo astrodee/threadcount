@@ -23,6 +23,7 @@ import threadcount as tc
 from threadcount.procedures import calculate_star_formation_rate as calc_sfr
 from threadcount.procedures import calculate_velocity_cuts as calc_vc
 from threadcount.procedures import set_rcParams
+from threadcount.procedures import open_cube_and_deredshift
 
 
 
@@ -64,10 +65,14 @@ def run(user_settings):
         # format: [axis1_begin, axis1_end, axis2_begin, axis2_end] or None
         # e.g. [2, -1, 3, -2] will map data[2:-1, 3:-2]
     }
+    #test if the cube has been opened.  If not, open cube and deredshift
+    if "cube" not in user_settings.keys():
+        user_settings = open_cube_and_deredshift.run(user_settings)
+        set_rcParams.set_params({"image.aspect" : user_settings["image_aspect"]})
     # s for settings
     s = tc.fit.process_settings_dict(default_settings, user_settings)
 
-    print('data filename:', s.data_filename)
+    #print('data filename:', s.data_filename)
     print('tc data filename:', s.two_gauss_mc_input_file)
 
     # calculate the escape velocity if it wasn't given
@@ -77,17 +82,14 @@ def run(user_settings):
             #need to calculate the effective radius
             if s.image_data_filename is None:
                 #use the threadcount output to find the effective radius
-                tc_data, wcs_step, z = calc_vc.read_in_threadcount_dict(s.two_gauss_mc_input_file)
+                tc_data, _, _ = calc_vc.read_in_threadcount_dict(s.two_gauss_mc_input_file)
 
-                #update the redshift in settings
-                s.z = z
-
-                _, _, rad = data_coords(tc_data, z, wcs_step)
+                _, _, rad = data_coords(tc_data, s.z_set, s.wcs_step)
 
                 s.effective_radius = calc_effective_radius_tc(tc_data, rad, flux_percentage=50)
 
                 #get rid of stuff we don't need out of memory
-                del tc_data, wcs_step, rad
+                del tc_data, rad
 
             else:
                 #use the given image data to find the effective radius
@@ -96,8 +98,8 @@ def run(user_settings):
         #now use that to calculate the escape velocity
         #this uses the assumed redshift from settings, or if you've used tc_data
         #to calculate the effective_radius it uses the z found in threadcount
-        print("redshift:", s.z)
-        s.escape_velocity = calc_vc.calculate_escape_velocity(s.effective_radius, s.stellar_mass, s.z)
+        print("redshift:", s.z_set)
+        s.escape_velocity = calc_vc.calculate_escape_velocity(s.effective_radius, s.stellar_mass, s.z_set)
 
     if s.average_disk_sigma is None:
         #use the threadcount output to find the average disk sigma
