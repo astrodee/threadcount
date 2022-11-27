@@ -682,15 +682,14 @@ def plot_residuals_vel_space(vel_vec, spec, residuals, gal_sigma_vel, v_esc=300,
 # MAIN
 #-------------------------------------------------------------------------------
 
-def main(data_filename, tc_filename, baseline_fit_range=[], baseline_fit_type=None, v_esc=300*units.km/units.s, disk_sigma=60*units.km/units.s, total_vel_start=0.0*units.km/units.s, line=lines.L_Hb4861):
+def main(cube, tc_filename, baseline_fit_range=[], baseline_fit_type=None, v_esc=300*units.km/units.s, disk_sigma=60*units.km/units.s, total_vel_start=0.0*units.km/units.s, line=lines.L_Hb4861):
     """
     Runs the whole thing
 
     Parameters
     ----------
-    data_filename : str
-        The file name and location of the data fits file with data in extension
-        0 and variance in extension 1
+    cube : :class:`mpdaf.obj.Cube`
+        the data cube
     tc_filename : str
         The file name and location of where the threadcount dictionary results
         were saved
@@ -730,14 +729,8 @@ def main(data_filename, tc_filename, baseline_fit_range=[], baseline_fit_type=No
         Array of flux from gas which is likely reaching velocities that enable
         it to escape the galaxy
     """
-    #read in the data file
-    cube = fits_read_in(data_filename)
-
     #read in the threadcount results
     gal_dict, wcs_step, z = read_in_threadcount_dict(tc_filename)
-
-    #deredshift the wavelength array
-    cube = get_wave_vector(cube, z=z)
 
     #create a subcube with a shorter wavelength range
     subcube = create_subcube(cube, center_wavelength=line.center)
@@ -831,7 +824,7 @@ def main(data_filename, tc_filename, baseline_fit_range=[], baseline_fit_type=No
     return residuals, vel_cuts_dict
 
 
-def main_one_spaxel(data_filename, tc_filename, i, j, baseline_fit_range=[], baseline_fit_type='quadratic', v_esc=300*units.km/units.s, disk_sigma=60*units.km/units.s,  line=lines.L_Hb4861):
+def main_one_spaxel(cube, tc_filename, i, j, baseline_fit_range=[], baseline_fit_type='quadratic', v_esc=300*units.km/units.s, disk_sigma=60*units.km/units.s, total_vel_start=0.0*units.km/units.s, line=lines.L_Hb4861):
     """
     Runs the whole thing for just one spaxel (i,j), does some plotting of:
         1. the baseline fit subtraction
@@ -840,9 +833,8 @@ def main_one_spaxel(data_filename, tc_filename, i, j, baseline_fit_range=[], bas
 
     Parameters
     ----------
-    data_filename : str
-        The file name and location of the data fits file with data in extension
-        0 and variance in extension 1
+    cube : :class:`mpdaf.obj.Cube`
+        the data cube
     tc_filename : str
         The file name and location of where the threadcount dictionary results
         were saved
@@ -864,6 +856,10 @@ def main_one_spaxel(data_filename, tc_filename, i, j, baseline_fit_range=[], bas
     disk_sigma : float, :obj: `astropy.units.quantity.Quantity`
         The average disk velocity dispersion in km/s (includes the units)
         Default is 60 km/s
+    total_vel_start : float, :obj: `astropy.units.quantity.Quantity`
+        The velocity at which to start counting flux for the total residual flux,
+        including units
+        Default is 0.0 km/s.  Could also use the disk_sigma.
     line : :obj: `threadcount.lines.Line`
         A threadcount emission line object with the information about line centre,
         line name, etc.
@@ -884,14 +880,8 @@ def main_one_spaxel(data_filename, tc_filename, i, j, baseline_fit_range=[], bas
         Flux from gas which is likely reaching velocities that enable it to escape
         the galaxy
     """
-    #read in the data file
-    cube = fits_read_in(data_filename)
-
     #read in the threadcount results
     gal_dict, wcs_step, z = read_in_threadcount_dict(tc_filename)
-
-    #deredshift the wavelength array
-    cube = get_wave_vector(cube, z=z)
 
     #create a subcube with a shorter wavelength range
     subcube = create_subcube(cube, center_wavelength=line.center)
