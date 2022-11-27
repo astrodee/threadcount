@@ -791,31 +791,31 @@ def main(cube, tc_filename, baseline_fit_range=[], baseline_fit_type=None, v_esc
             #do the flux cuts calculation
             #disk_turb_flux[i,j], fountain_flux[i,j], escape_flux[i,j] = get_velocity_bands(vel_vec.value, this_spec.wave.coord(), residuals.data[:,i,j], disk_sigma.value, v_esc=v_esc.value, v_end=v_end)
 
-            disk_turb_flux[i,j], disk_turb_sn[i,j] = get_velocity_band_flux(vel_vec.value, this_spec.wave.coord(), residuals.data[:,i,j], disk_sigma.value, -disk_sigma.value, average_noise)
+            disk_turb_flux.data[i,j], disk_turb_sn.data[i,j] = get_velocity_band_flux(vel_vec.value, this_spec.wave.coord(), residuals.data[:,i,j], disk_sigma.value, -disk_sigma.value, average_noise)
 
-            total_residual_flux[i,j], total_residual_sn[i,j] = get_velocity_band_flux(vel_vec.value, this_spec.wave.coord(), residuals.data[:,i,j], total_vel_start.value, v_end.value, average_noise)
+            total_residual_flux.data[i,j], total_residual_sn.data[i,j] = get_velocity_band_flux(vel_vec.value, this_spec.wave.coord(), residuals.data[:,i,j], total_vel_start.value, v_end.value, average_noise)
 
             #if the flux disappears into the noise after v_esc
             if v_end.value > v_esc.value:
-                fountain_flux[i,j], fountain_sn[i,j] = get_velocity_band_flux(vel_vec.value, this_spec.wave.coord(), residuals.data[:,i,j], disk_sigma.value, v_esc.value, average_noise)
+                fountain_flux.data[i,j], fountain_sn.data[i,j] = get_velocity_band_flux(vel_vec.value, this_spec.wave.coord(), residuals.data[:,i,j], disk_sigma.value, v_esc.value, average_noise)
 
-                escape_flux[i,j], escape_sn[i,j] = get_velocity_band_flux(vel_vec.value, this_spec.wave.coord(), residuals.data[:,i,j], v_esc.value, v_end.value, average_noise)
+                escape_flux.data[i,j], escape_sn.data[i,j] = get_velocity_band_flux(vel_vec.value, this_spec.wave.coord(), residuals.data[:,i,j], v_esc.value, v_end.value, average_noise)
 
             else:
-                fountain_flux[i,j], fountain_sn[i,j] = get_velocity_band_flux(vel_vec.value, this_spec.wave.coord(), residuals.data[:,i,j], disk_sigma.value, v_end.value, average_noise)
+                fountain_flux.data[i,j], fountain_sn.data[i,j] = get_velocity_band_flux(vel_vec.value, this_spec.wave.coord(), residuals.data[:,i,j], disk_sigma.value, v_end.value, average_noise)
 
-                escape_flux[i,j], escape_sn[i,j] = 0.0, 0.0
+                escape_flux.data[i,j], escape_sn.data[i,j] = 0.0, 0.0
 
     #save the results in a dictionary
     vel_cuts_dict = fit.ResultDict(data_dict={
-                        "total_residual_flux" : total_residual_flux,
-                        "total_residual_sn" : total_residual_sn,
-                        "disk_flux" : disk_turb_flux,
-                        "disk_residual_sn" : disk_turb_sn,
-                        "low_velocity_outflow" : fountain_flux,
-                        "low_velocity_sn" : fountain_sn,
-                        "high_velocity_outflow" : escape_flux,
-                        "high_velocity_sn" : escape_sn,
+                        "total_residual_flux" : total_residual_flux.data,
+                        "total_residual_sn" : total_residual_sn.data,
+                        "disk_flux" : disk_turb_flux.data,
+                        "disk_residual_sn" : disk_turb_sn.data,
+                        "low_velocity_outflow" : fountain_flux.data,
+                        "low_velocity_sn" : fountain_sn.data,
+                        "high_velocity_outflow" : escape_flux.data,
+                        "high_velocity_sn" : escape_sn.data,
                         },
                         comment = f"Total residual measured from {total_vel_start:.0g} to v_end\n"+
                         "units: 10^-16 erg / (cm^2 s)\n"
@@ -926,13 +926,17 @@ def main_one_spaxel(cube, tc_filename, i, j, baseline_fit_range=[], baseline_fit
 
     #calculate where the residual disappears into the noise
     #need to use pre-baseline subtracted data
-    v_end = abs(determine_v_end(vel_vec, subcube[:,i,j], residuals, gal_sigma_vel=disk_sigma).value)
+    v_end, average_noise = determine_v_end(vel_vec, subcube[:,i,j], residuals.data, gal_sigma_vel=disk_sigma)
+    v_end = abs(v_end.value)
+    #v_end = abs(determine_v_end(vel_vec, subcube[:,i,j], residuals, gal_sigma_vel=disk_sigma).value)
 
     #plot the data minus galaxy
     fig2 = plot_data_minus_gal(this_spec.wave.coord(), this_spec.data, residuals.data, gal_dict, i, j)
 
     #plot the data and residuals in velocity space
     fig3 = plot_residuals_vel_space(vel_vec, this_spec, residuals, disk_sigma.value, v_esc=v_esc.value, v_end=v_end)
+
+    plt.show()
 
 
     #do the flux calculation
