@@ -224,7 +224,11 @@ def subtract_gaussian(wave, spec, height, center, sigma, const=None):
         The residual of the Gaussian subtracted from the data
     """
     #get the gaussian
-    gauss = models.gaussianH(wave, height=height, center=center, sigma=sigma)
+    #gauss = models.gaussianH(wave, height=height, center=center, sigma=sigma)
+    gmodel = models.GaussianModelH()
+    params = gmodel.make_params(height=height, center=center, sigma=sigma)
+    gauss = gmodel.eval(params, x=wave)
+
 
     #add the constant
     if const is not None:
@@ -564,9 +568,15 @@ def plot_data_minus_gal(wave, spec, residuals, gal_dict, i, j):
     const, const_err = gal_dict['avg_c'], gal_dict['avg_c_err']
 
     #create the gaussians
-    gal_gauss = models.gaussianH(wave, height=gal_height[i,j], center=gal_center[i,j], sigma=gal_sigma[i,j])
+    #gal_gauss = models.gaussianH(wave, height=gal_height[i,j], center=gal_center[i,j], sigma=gal_sigma[i,j])
+    gmodel = models.GaussianModelH()
+    params = gmodel.make_params(height=gal_height[i,j], center=gal_center[i,j], sigma=gal_sigma[i,j])
+    gal_gauss = gmodel.eval(params, x=wave)
 
-    flow_gauss = models.gaussianH(wave, height=flow_height[i,j], center=flow_center[i,j], sigma=flow_sigma[i,j])
+    #flow_gauss = models.gaussianH(wave, height=flow_height[i,j], center=flow_center[i,j], sigma=flow_sigma[i,j])
+    gmodel = models.GaussianModelH()
+    params = gmodel.make_params(height=flow_height[i,j], center=flow_center[i,j], sigma=flow_sigma[i,j])
+    flow_gauss = gmodel.eval(params, x=wave)
 
     #create the interpolated model
     model_x = np.linspace(gal_center[i,j]-15, gal_center[i,j]+15,500)
