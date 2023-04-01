@@ -1,6 +1,14 @@
 Changelog
 =========
 
+0.0.6 (26/03/2023)
+------------------
+
+* include package *numdifftools* in setup.cfg
+* change setting *region_averaging_radius* to understand that an input of 0 radius
+  means no region averaging. Inside the code, 0 radius is reset a radius of 0.5 (1 pixel diameter region).
+
+
 0.0.2 (23/02/2022)
 ------------------
 

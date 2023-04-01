@@ -1,6 +1,13 @@
+import logging
+from ..fits.cpufitter import CubeFitterMPDAFLM
+
 import numpy as np
 import threadcount as tc
 from itertools import tee
+
+
+logger = logging.getLogger(__name__)
+np.seterr(invalid="ignore")
 
 
 def run(s):  # noqa: C901
@@ -10,7 +17,7 @@ def run(s):  # noqa: C901
 
     index = s._i
     this_line = s.lines[index]
-    print("Processing line {}".format(this_line.label))
+    logger.info("Processing line {}".format(this_line.label))
     models = s.models[index]
     # initialize baseline results:
     if not hasattr(s, "baseline_results"):
@@ -78,44 +85,23 @@ def run(s):  # noqa: C901
         )
         s.baseline_results[s._i] = baseline_fitresults
 
-    for idx in iterate:
-        sp = subcube_av[(slice(None), *idx)]
-        # this below line is how I originally tried this, and it works.
-        # for sp, idx in mpdaf.obj.iter_spe(subcube_av, index=True):
-        # Test if it passes the SNR test:
-        if snr_image[idx] < snr_threshold:
-            # fit_results_T[idx] = [None] * len(models)
-            continue
+    logger.info("Start fitting data")
+    nprocess = None
 
-        # Fit the least complex model, and make sure of success.
-        spec_to_fit = sp
-        f = spec_to_fit.lmfit(models[0], **s.lmfit_kwargs)
-        if f is None:
-            # fit_results_T[idx] = [None] * len(models)
-            continue
+    fr = CubeFitterMPDAFLM(
+        subcube_av,
+        list(iterate),
+        models,
+        snr_image,
+        snr_threshold,
+        nprocess=nprocess,
+        **s.lmfit_kwargs
+    )
+    fr.fit_cube()
 
-        if f.success is False:
-            # One reason we saw for 1 gaussian fit to fail includes the iron line when
-            # fitting 5007. Therefore, if there is a failure to fit 1 gaussian, I will
-            # cut down the x axis by 5AA on each side and try again.
-            wave_range = sp.get_range()
-            print("cutting spectrum by +/- 5A for pixel {}".format(idx))
-            cut_sp = sp.subspec(wave_range[0] + 5, wave_range[1] - 5)
-            spec_to_fit = cut_sp
-            f = spec_to_fit.lmfit(models[0], **s.lmfit_kwargs)
-            if f.success is False:
-                # fit_results_T[idx] = [None] * len(models)
-                continue
+    fit_results_T[:] = fr.fit_results_T[:]
 
-        # at this point: if the first model has failed to fit both times, we don't
-        # even reach this point, the loop continues. However, if the first model
-        # fit the first time, then spec_to_fit = sp. If the first model failed the
-        # first time and succeeded the second time, then spec_to_fit = cut_sp.
-
-        # continue with the rest of the models.
-        rest = [spec_to_fit.lmfit(model, **s.lmfit_kwargs) for model in models[1:]]
-        fit_results_T[idx] = [f] + rest
-    print("Finished the fits.")
+    logger.debug("Finished the fits.")
 
     # %%
     # make model choices.

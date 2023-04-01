@@ -15,7 +15,7 @@ from . import models
 from . import mpdaf_ext  # noqa: F401
 
 
-FLAM16 = u.Unit(1e-16 * u.erg / (u.cm ** 2 * u.s * u.AA))
+FLAM16 = u.Unit(1e-16 * u.erg / (u.cm**2 * u.s * u.AA))
 """A header["BUNIT"] value we have."""
 
 FLOAT_FMT = ".8g"
@@ -501,6 +501,13 @@ def get_region(rx, ry=None):
     # Defaults to a circle if ry=None
     if ry is None:
         ry = rx
+
+    # understand that if someone puts 0 they mean they want this feature off
+    # so set any 0 to be 0.5 pixel.
+    if rx == 0:
+        rx = 0.5
+    if ry == 0:
+        ry = 0.5
 
     rx = abs(rx)
     ry = abs(ry)
@@ -2002,7 +2009,17 @@ def extract_spaxel_info_mc(
         return fit_info + param_names
     if mc_fits is None or len(mc_fits) == 0:
         return np.array(
-            np.broadcast_to(None, (len(fit_info) + 3 * len(model_params,))), dtype=float
+            np.broadcast_to(
+                None,
+                (
+                    len(fit_info)
+                    + 3
+                    * len(
+                        model_params,
+                    )
+                ),
+            ),
+            dtype=float,
         )
     #         return [None]*(len(fit_info)+3*len(model_params))
     dx = mc_fits[0].userkws["x"][1] - mc_fits[0].userkws["x"][0]
