@@ -76,6 +76,7 @@ the plots takes a considerably large amount of time as well.
    procedure_fit_lines
    procedure_outflow_extent
    procedure_rcparams
+   procedure_explore_results
 
 
 Models for use with lmfit
