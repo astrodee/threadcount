@@ -1,6 +1,75 @@
 Changelog
 =========
 
+0.1.0 (23/05/2023)
+------------------
+
+### Enhancement:
+* Add new guess function for 3 gaussians. Make use of it in your runner file by:
+  ```python
+  model = tc.models.Const_3GaussModel()
+  model.guess = tc.models._guess_multiline3  # uses the default parameters 
+
+  # to specify parameters, e.g. here specifying centers and absolute_centers: 
+  model.guess = lambda data, x : tc.models._guess_multiline3(self = model, data = data, x = x,
+      centers = (-14, 0, 21),
+      absolute_centers = True
+  )
+  ```
+* Add new guess function for 2 gaussians. Make use of it in your runner file by:
+  ```python
+  model = tc.models.Const_2GaussModel()
+  model.guess = tc.models._guess_multiline2  # uses the default parameters 
+
+  # to specify parameters, e.g. here specifying centers and absolute_centers: 
+  model.guess = lambda data, x : tc.models._guess_multiline2(self = model, data = data, x = x,
+      centers = (-1, 0),
+      absolute_centers = True
+  )
+  ```  
+* Add troubleshooting model_results to settings dictionary
+* Exception handling in src/threadcount/mpdaf_ext.py, do not stop the looping but returns None.
+
+
+0.0.6 (11/05/2023)
+------------------
+
+### Enhancement:
+* Add explore_results procedure and example
+
+
+0.0.5 (20/08/2022)
+------------------
+
+### Bug fixes:
+* src/threadcount/lmfit_ext.py
+  * update order_gauss to fix bug
+
+
+0.0.4 (05/06/2022)
+------------------
+
+### Bug fixes:
+
+* src/threadcount/procedures/fit_line.py
+  * fixed bug in fit iterator
+* src/threadcount/fit.py
+  * fixed bug in calculating new_y
+
+
+0.0.3 (05/06/2022)
+------------------
+
+### Enhancements:
+
+* Add baseline fitting, removing, and plotting
+
+### Bug fixes:
+
+* src/threadcount/mpdaf_ext.py
+  * fixed bug in fit error catching
+
+
 0.0.2 (23/02/2022)
 ------------------
 
