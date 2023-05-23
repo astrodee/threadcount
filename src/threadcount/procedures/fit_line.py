@@ -15,7 +15,7 @@ def run(s):  # noqa: C901
     # initialize baseline results:
     if not hasattr(s, "baseline_results"):
         s.baseline_results = [None] * len(s.lines)
-
+    
     # create a subcube, and region average each of the wavelength channels.
     # creating a subcube like this is a view into the original cube, and doesn't copy
     # the data, so any change to subcube changes cube.
@@ -115,6 +115,8 @@ def run(s):  # noqa: C901
         # continue with the rest of the models.
         rest = [spec_to_fit.lmfit(model, **s.lmfit_kwargs) for model in models[1:]]
         fit_results_T[idx] = [f] + rest
+    
+    s.model_results = fit_results
     print("Finished the fits.")
 
     # %%

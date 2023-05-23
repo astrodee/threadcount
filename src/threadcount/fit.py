@@ -2406,7 +2406,7 @@ def remove_baseline(
     spatial_shape = subcube_av.shape[1:]
     subcube_wave_range = subcube_av.wave.get_range()
 
-    buffer_outside = 10
+    buffer_outside = 5.
     baseline_subcube = cube.select_lambda(
         this_baseline_range[0][0] - buffer_outside,
         this_baseline_range[1][1] + buffer_outside,

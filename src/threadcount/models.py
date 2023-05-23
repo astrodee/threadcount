@@ -383,6 +383,198 @@ def _guess_3gauss(
 
     return lmfit.models.update_param_vals(pars, self.prefix, **kwargs)
 
+def _guess_multiline3(
+    self,
+    data,
+    x,
+    sigma0=None,
+    heights=(1, 4, 1),
+    sigma_factors=(1, 1, 1),
+    centers=(-1, 0, 1),
+    absolute_centers=False,
+    focus_lam=None,
+    **kwargs
+):
+    """Estimate initial model parameter values from data.
+
+   This version is for fitting multiple emission lines that are near each other 
+   (e.g. Halpha + NII). It is currently hard coded to use the middle Gaussian (g2) as the line
+   that is focused on, and then shifts the other Gaussians relative to that. By default 
+   it uses the bounds on g2 set in model.set_param_hint. This can be overwritten by specifying
+   focus_lam = [start wavelength, end wavelength] of your region that you want to use to guide
+   your initial guesses. 
+
+    Parameters
+    ----------
+    data : array_like
+        Array of data (i.e., y-values) to use to guess parameter values.
+    x : array_like
+        Array of values for the independent variable (i.e., x-values).
+    sigma0 : float, optional
+        Sets the reference value for computing sigmas and centers, by default None.
+        If None, this will be set to the sigma returned from :func:`guess_from_peak`,
+        which is related to FWHM.
+    heights : array_like of floats of length 3, optional
+        A list containing relative heights of [g1_height, g2_height, g3_height],
+        by default (1,4,1).
+        These will have an overall scale factor computed, so no need to normalize.
+    sigma_factors : array_like of floats of length 3, optional
+        [g1_sigma, g2_sigma, g3_sigma] = `sigma0` * sigma_factors, by default (1,1,1)
+    centers : array_like of floats of length 3, optional
+        Change from the 1 gaussian guessed center, in units of `sigma0` unless
+        `absolute_centers` is True, by default (-1,0,1)
+        [g1_center, g2_center, g3_center] = center + `sigma0` * `centers`
+    absolute_centers : bool, optional
+        If True, modifies the centers equation to:
+        [g1_center, g2_center, g3_center] = center + `centers`, by default False
+    focus_lam : array_like of floats of length 2, optional
+        Sets the wavelength range of the guess region for g2, by default None.
+        If None, this will be set to the model's param_hint for 'g2_center' [min, max].
+        If the param_hint min/max is not set, then the min/max of x is used.
+    **kws : optional
+        Additional keyword arguments, passed to model function.
+
+    Returns
+    -------
+    params : :class:`~lmfit.parameter.Parameters`
+        Initial, guessed values for the parameters of a Model.
+    """
+    if focus_lam is None:
+        focus_lam = [np.min(x),np.max(x)]
+        focus_lam[0] = self.param_hints['g2_center'].get('min',focus_lam[0])
+        focus_lam[1] = self.param_hints['g2_center'].get('max',focus_lam[1])
+
+
+    focus_index = (x > focus_lam[0]) &  (x < focus_lam[1])
+
+    height, center, sigma = guess_from_peak(data[focus_index], x[focus_index])
+    constant = mean_edges(data, edge_fraction=0.1)
+
+    # fill in any missing function parameters based on 1gauss guess:
+    if sigma0 is None:
+        sigma0 = sigma
+
+    # calculate component guesses based off 1gauss guess and function parameters
+    g1_sigma, g2_sigma, g3_sigma = sigma0 * np.array(sigma_factors)
+    if absolute_centers:
+        g1_center, g2_center, g3_center = center + np.array(centers)
+    else:
+        g1_center, g2_center, g3_center = center + sigma0 * np.array(centers)
+
+    # The factor "a" is not for a guess based on a single line 
+    #a = sigma / (heights[0] * g1_sigma + heights[1] * g2_sigma + heights[2] * g3_sigma)
+    g1_height, g2_height, g3_height =  height * np.array(heights)
+
+    pars = self.make_params(
+        g1_height=g1_height,
+        g1_center=g1_center,
+        g1_sigma=g1_sigma,
+        g2_height=g2_height,
+        g2_center=g2_center,
+        g2_sigma=g2_sigma,
+        g3_height=g3_height,
+        g3_center=g3_center,
+        g3_sigma=g3_sigma,
+        c=constant,
+    )
+
+    return lmfit.models.update_param_vals(pars, self.prefix, **kwargs)
+
+def _guess_multiline2(
+    self,
+    data,
+    x,
+    sigma0=None,
+    heights=(1, 4),
+    sigma_factors=(1, 1),
+    centers=(-1, 0),
+    absolute_centers=False,
+    focus_lam=None,
+    **kwargs
+):
+    """Estimate initial model parameter values from data.
+
+   This version is for fitting 2  emission lines that are near each other 
+   (e.g. [OII] doublet). It is currently hard coded to use the middle Gaussian (g2) as the line
+   that is focused on, and then shifts the other Gaussian relative to that. By default 
+   it uses the bounds on g2 set in model.set_param_hint. This can be overwritten by specifying
+   focus_lam = [start wavelength, end wavelength] of your region that you want to use to guide
+   your initial guesses. 
+
+    Parameters
+    ----------
+    data : array_like
+        Array of data (i.e., y-values) to use to guess parameter values.
+    x : array_like
+        Array of values for the independent variable (i.e., x-values).
+    sigma0 : float, optional
+        Sets the reference value for computing sigmas and centers, by default None.
+        If None, this will be set to the sigma returned from :func:`guess_from_peak`,
+        which is related to FWHM.
+    heights : array_like of floats of length 2, optional
+        A list containing relative heights of [g1_height, g2_height],
+        by default (1,4).
+        These will have an overall scale factor computed, so no need to normalize.
+    sigma_factors : array_like of floats of length 2, optional
+        [g1_sigma, g2_sigma] = `sigma0` * sigma_factors, by default (1,1)
+    centers : array_like of floats of length 2, optional
+        Change from the 1 gaussian guessed center, in units of `sigma0` unless
+        `absolute_centers` is True, by default (-1,0)
+        [g1_center, g2_center] = center + `sigma0` * `centers`
+    absolute_centers : bool, optional
+        If True, modifies the centers equation to:
+        [g1_center, g2_center] = center + `centers`, by default False
+    focus_lam : array_like of floats of length 2, optional
+        Sets the wavelength range of the guess region for g2, by default None.
+        If None, this will be set to the model's param_hint for 'g2_center' [min, max].
+        If the param_hint min/max is not set, then the min/max of x is used.
+    **kws : optional
+        Additional keyword arguments, passed to model function.
+
+    Returns
+    -------
+    params : :class:`~lmfit.parameter.Parameters`
+        Initial, guessed values for the parameters of a Model.
+    """
+    if focus_lam is None:
+        focus_lam = [np.min(x),np.max(x)]
+        focus_lam[0] = self.param_hints['g2_center'].get('min',focus_lam[0])
+        focus_lam[1] = self.param_hints['g2_center'].get('max',focus_lam[1])
+
+
+    focus_index = (x > focus_lam[0]) &  (x < focus_lam[1])
+
+    height, center, sigma = guess_from_peak(data[focus_index], x[focus_index])
+    constant = mean_edges(data, edge_fraction=0.1)
+
+    # fill in any missing function parameters based on 1gauss guess:
+    if sigma0 is None:
+        sigma0 = sigma
+
+    # calculate component guesses based off 1gauss guess and function parameters
+    g1_sigma, g2_sigma = sigma0 * np.array(sigma_factors)
+    if absolute_centers:
+        g1_center, g2_center  = center + np.array(centers)
+    else:
+        g1_center, g2_center  = center + sigma0 * np.array(centers)
+
+    # The factor "a" is not for a guess based on a single line 
+    #a = sigma / (heights[0] * g1_sigma + heights[1] * g2_sigma + heights[2] * g3_sigma)
+    g1_height, g2_height =  height * np.array(heights)
+
+    pars = self.make_params(
+        g1_height=g1_height,
+        g1_center=g1_center,
+        g1_sigma=g1_sigma,
+        g2_height=g2_height,
+        g2_center=g2_center,
+        g2_sigma=g2_sigma,
+        c=constant,
+    )
+
+    return lmfit.models.update_param_vals(pars, self.prefix, **kwargs)
+
+
 
 def _guess_3gauss_old(
     self,

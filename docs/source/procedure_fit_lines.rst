@@ -494,3 +494,23 @@ Columns:
   * "std\_c": The standard deviation of c's value from all the iterations.
   * "avg\_c\_err": The average value of c's stderr from each fit (computed via
     median).
+
+
+
+Troubleshooting
+---------------
+
+Once the fit_lines procedure has completed,
+An array of the lmfit ModelResults is saved in the settings dictionary.
+
+If the procedure was run in an interactive shell like IPython or Jupyter, you will
+still have access to the settings dictionary.
+
+Read in lmfit about :class:`~lmfit.model.ModelResult` and what you can learn.
+
+For example, to view the fit and initial guess for pixel (y,x) for the 
+model of index 1 (in array of models to fit):
+
+.. code:: python
+
+    settings['model_results'][1, y, x].plot(show_init=True)
