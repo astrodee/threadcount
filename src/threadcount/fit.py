@@ -200,7 +200,7 @@ def tweak_redshift(
     params = None
     print("Fitting selected spaxels with gaussian model...")
     for y, x in zip(*valid_pixels):
-        this_mr = subcube[:, y, x].lmfit(model, params=params, method="least_squares")
+        this_mr = subcube[:, y, x].lmfit(model, params=params, method="least_squares", nan_policy='omit')
         if params is None:
             params = this_mr.params
         results += [this_mr]
