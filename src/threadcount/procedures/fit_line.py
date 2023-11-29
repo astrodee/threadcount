@@ -35,6 +35,7 @@ def run(s):  # noqa: C901
     # This default way to get the snr image:
     snr_image = tc.fit.get_SNR_map(subcube_av)
 
+
     # Subtract the continuum:
     if subcontinuum_av:
         subcube_av -= subcontinuum_av
@@ -83,7 +84,7 @@ def run(s):  # noqa: C901
         # this below line is how I originally tried this, and it works.
         # for sp, idx in mpdaf.obj.iter_spe(subcube_av, index=True):
         # Test if it passes the SNR test:
-        if snr_image[idx] < snr_threshold:
+        if (snr_image[idx] < snr_threshold) or (np.isnan(snr_image[idx])==True):
             # fit_results_T[idx] = [None] * len(models)
             continue
 

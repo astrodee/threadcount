@@ -26,7 +26,7 @@ DEFAULT_FIT_INFO = "aic_real bic_real chisqr redchi success".split()
 
 
 def open_fits_cube(
-    data_filename, data_hdu_index=None, var_filename=None, var_hdu_index=None, **kwargs
+    data_filename, data_hdu_index=None, var_filename=None, var_hdu_index=None, mask_if_over_n_nans=None, **kwargs
 ):
     """Load a fits file using :class:`mpdaf.obj.Cube`, and handle variance in separate file.
 
@@ -76,7 +76,11 @@ def open_fits_cube(
         # varcube is loaded as masked array.
         cube._var = varcube.data.data
         cube._mask |= varcube.mask
-
+    if mask_if_over_n_nans is not None:
+        masksum = cube.mask.sum(axis=0)
+        for iy, ix in np.ndindex(masksum.shape):
+            if masksum[iy, ix] > mask_if_over_n_nans:
+                cube.mask[:,iy,ix] = True
     # test for FLAM16:
     if cube.unit == u.dimensionless_unscaled:
         if cube.data_header.get("BUNIT") == "FLAM16":
@@ -592,7 +596,7 @@ def spatial_average(cube, kernel_image, **kwargs):
     return output
 
 
-def get_SNR_map(cube, signal_idx=None, signal_Angstrom=None, nsigma=5, plot=False):
+def get_SNR_map(cube, signal_idx=None, signal_Angstrom=None, nsigma=5, plot=True):
     """Create Image of signal to noise ratio in a given bandwidth.
 
     This bandwidth may be selected in 3 different ways:

@@ -62,6 +62,7 @@ def run(user_settings):
         "var_filename": None,
         "var_hdu_index": None,
         "continuum_filename": None,  # Empty string or None if not supplied.
+        "mask_spaxel_if_this_many_nans": 20,
         "z": 0.0339,
         "tweak_redshift": False,
         "tweak_redshift_line": tc.lines.L_OIII5007,
@@ -72,7 +73,7 @@ def run(user_settings):
 
     # %%
     cube = tc.fit.open_fits_cube(
-        s.data_filename, s.data_hdu_index, s.var_filename, s.var_hdu_index
+        s.data_filename, s.data_hdu_index, s.var_filename, s.var_hdu_index, s.mask_spaxel_if_this_many_nans
     )
     if s.continuum_filename not in ("", None):
         continuum_cube = tc.fit.open_fits_cube(s.continuum_filename)
