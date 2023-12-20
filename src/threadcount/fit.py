@@ -596,7 +596,7 @@ def spatial_average(cube, kernel_image, **kwargs):
     return output
 
 
-def get_SNR_map(cube, signal_idx=None, signal_Angstrom=None, nsigma=5, plot=True):
+def get_SNR_map(cube, signal_idx=None, signal_Angstrom=None, nsigma=5, plot=False):
     """Create Image of signal to noise ratio in a given bandwidth.
 
     This bandwidth may be selected in 3 different ways:
