@@ -14,13 +14,67 @@ def gaussianH(x, height=1.0, center=0.0, sigma=1.0):
     gaussian(x, height, center, sigma) =
         height * exp(-(1.0*x-center)**2 / (2*sigma**2))
     """
-    return height * np.exp(-((1.0 * x - center) ** 2) / max(tiny, (2 * sigma ** 2)))
+    return height * np.exp(-((1.0 * x - center) ** 2) / max(tiny, (2 * sigma**2)))
+
+
+def gaussian2CH(
+    x,
+    g1_height=1.0,
+    g1_center=0.0,
+    g1_sigma=1.0,
+    g2_height=1.0,
+    g2_center=0.0,
+    g2_sigma=1.0,
+    c=0.0,
+):
+    """Return a 2-Gaussian function in 1-dimension."""
+    f = (
+        g1_height * np.exp(-((1.0 * x - g1_center) ** 2) / max(tiny, (2 * g1_sigma**2)))
+        + g2_height * np.exp(-((1.0 * x - g2_center) ** 2) / max(tiny, (2 * g2_sigma**2)))
+        + c
+    )
+    return f
+
+
+def gaussian3CH(
+    x,
+    g1_height=1.0,
+    g1_center=0.0,
+    g1_sigma=1.0,
+    g2_height=1.0,
+    g2_center=0.0,
+    g2_sigma=1.0,
+    g3_height=1.0,
+    g3_center=0.0,
+    g3_sigma=1.0,
+    c=0.0,
+):
+    """Return a 3-Gaussian function in 1-dimension."""
+    f = (
+        g1_height * np.exp(-((1.0 * x - g1_center) ** 2) / max(tiny, (2 * g1_sigma**2)))
+        + g2_height * np.exp(-((1.0 * x - g2_center) ** 2) / max(tiny, (2 * g2_sigma**2)))
+        + g3_height * np.exp(-((1.0 * x - g3_center) ** 2) / max(tiny, (2 * g3_sigma**2)))
+        + c
+    )
+    return f
 
 
 def flux_expr(model):
     """Return constraint expression for line flux."""
     fmt = "{factor:.7f}*{prefix:s}height*{prefix:s}sigma"
     return fmt.format(factor=model.flux_factor, prefix=model.prefix)
+
+
+def fwhm_expr_fast(model, comp_pre):
+    """Return constraint expression for fwhm of one component."""
+    fmt = "{factor:.7f}*{prefix:s}sigma"
+    return fmt.format(factor=model.fwhm_factor, prefix=model.prefix + comp_pre)
+
+
+def flux_expr_fast(model, comp_pre):
+    """Return constraint expression for line flux of one component."""
+    fmt = "{factor:.7f}*{prefix:s}height*{prefix:s}sigma"
+    return fmt.format(factor=model.flux_factor, prefix=model.prefix + comp_pre)
 
 
 def guess_from_peak(y, x, negative=False):
@@ -129,7 +183,10 @@ def _guess_1gauss(self, data, x, **kwargs):
     constant = mean_edges(data, edge_fraction=0.1)
 
     pars = self.make_params(
-        g1_height=g1_height, g1_center=g1_center, g1_sigma=g1_sigma, c=constant,
+        g1_height=g1_height,
+        g1_center=g1_center,
+        g1_sigma=g1_sigma,
+        c=constant,
     )
 
     return lmfit.models.update_param_vals(pars, self.prefix, **kwargs)
@@ -235,14 +292,7 @@ def _guess_2gauss(
 
 
 def _guess_2gauss_old(
-    self,
-    data,
-    x,
-    g1_sigma=None,
-    h2_factor=0.25,
-    s2_factor=1,
-    cen2_offset=None,
-    **kwargs
+    self, data, x, g1_sigma=None, h2_factor=0.25, s2_factor=1, cen2_offset=None, **kwargs
 ):
     """Estimate initial model parameter values from data.
 
@@ -383,6 +433,7 @@ def _guess_3gauss(
 
     return lmfit.models.update_param_vals(pars, self.prefix, **kwargs)
 
+
 def _guess_multiline3(
     self,
     data,
@@ -397,55 +448,54 @@ def _guess_multiline3(
 ):
     """Estimate initial model parameter values from data.
 
-   This version is for fitting multiple emission lines that are near each other 
-   (e.g. Halpha + NII). It is currently hard coded to use the middle Gaussian (g2) as the line
-   that is focused on, and then shifts the other Gaussians relative to that. By default 
-   it uses the bounds on g2 set in model.set_param_hint. This can be overwritten by specifying
-   focus_lam = [start wavelength, end wavelength] of your region that you want to use to guide
-   your initial guesses. 
+    This version is for fitting multiple emission lines that are near each other
+    (e.g. Halpha + NII). It is currently hard coded to use the middle Gaussian (g2) as the line
+    that is focused on, and then shifts the other Gaussians relative to that. By default
+    it uses the bounds on g2 set in model.set_param_hint. This can be overwritten by specifying
+    focus_lam = [start wavelength, end wavelength] of your region that you want to use to guide
+    your initial guesses.
 
-    Parameters
-    ----------
-    data : array_like
-        Array of data (i.e., y-values) to use to guess parameter values.
-    x : array_like
-        Array of values for the independent variable (i.e., x-values).
-    sigma0 : float, optional
-        Sets the reference value for computing sigmas and centers, by default None.
-        If None, this will be set to the sigma returned from :func:`guess_from_peak`,
-        which is related to FWHM.
-    heights : array_like of floats of length 3, optional
-        A list containing relative heights of [g1_height, g2_height, g3_height],
-        by default (1,4,1).
-        These will have an overall scale factor computed, so no need to normalize.
-    sigma_factors : array_like of floats of length 3, optional
-        [g1_sigma, g2_sigma, g3_sigma] = `sigma0` * sigma_factors, by default (1,1,1)
-    centers : array_like of floats of length 3, optional
-        Change from the 1 gaussian guessed center, in units of `sigma0` unless
-        `absolute_centers` is True, by default (-1,0,1)
-        [g1_center, g2_center, g3_center] = center + `sigma0` * `centers`
-    absolute_centers : bool, optional
-        If True, modifies the centers equation to:
-        [g1_center, g2_center, g3_center] = center + `centers`, by default False
-    focus_lam : array_like of floats of length 2, optional
-        Sets the wavelength range of the guess region for g2, by default None.
-        If None, this will be set to the model's param_hint for 'g2_center' [min, max].
-        If the param_hint min/max is not set, then the min/max of x is used.
-    **kws : optional
-        Additional keyword arguments, passed to model function.
+     Parameters
+     ----------
+     data : array_like
+         Array of data (i.e., y-values) to use to guess parameter values.
+     x : array_like
+         Array of values for the independent variable (i.e., x-values).
+     sigma0 : float, optional
+         Sets the reference value for computing sigmas and centers, by default None.
+         If None, this will be set to the sigma returned from :func:`guess_from_peak`,
+         which is related to FWHM.
+     heights : array_like of floats of length 3, optional
+         A list containing relative heights of [g1_height, g2_height, g3_height],
+         by default (1,4,1).
+         These will have an overall scale factor computed, so no need to normalize.
+     sigma_factors : array_like of floats of length 3, optional
+         [g1_sigma, g2_sigma, g3_sigma] = `sigma0` * sigma_factors, by default (1,1,1)
+     centers : array_like of floats of length 3, optional
+         Change from the 1 gaussian guessed center, in units of `sigma0` unless
+         `absolute_centers` is True, by default (-1,0,1)
+         [g1_center, g2_center, g3_center] = center + `sigma0` * `centers`
+     absolute_centers : bool, optional
+         If True, modifies the centers equation to:
+         [g1_center, g2_center, g3_center] = center + `centers`, by default False
+     focus_lam : array_like of floats of length 2, optional
+         Sets the wavelength range of the guess region for g2, by default None.
+         If None, this will be set to the model's param_hint for 'g2_center' [min, max].
+         If the param_hint min/max is not set, then the min/max of x is used.
+     **kws : optional
+         Additional keyword arguments, passed to model function.
 
-    Returns
-    -------
-    params : :class:`~lmfit.parameter.Parameters`
-        Initial, guessed values for the parameters of a Model.
+     Returns
+     -------
+     params : :class:`~lmfit.parameter.Parameters`
+         Initial, guessed values for the parameters of a Model.
     """
     if focus_lam is None:
-        focus_lam = [np.min(x),np.max(x)]
-        focus_lam[0] = self.param_hints['g2_center'].get('min',focus_lam[0])
-        focus_lam[1] = self.param_hints['g2_center'].get('max',focus_lam[1])
+        focus_lam = [np.min(x), np.max(x)]
+        focus_lam[0] = self.param_hints["g2_center"].get("min", focus_lam[0])
+        focus_lam[1] = self.param_hints["g2_center"].get("max", focus_lam[1])
 
-
-    focus_index = (x > focus_lam[0]) &  (x < focus_lam[1])
+    focus_index = (x > focus_lam[0]) & (x < focus_lam[1])
 
     height, center, sigma = guess_from_peak(data[focus_index], x[focus_index])
     constant = mean_edges(data, edge_fraction=0.1)
@@ -461,9 +511,9 @@ def _guess_multiline3(
     else:
         g1_center, g2_center, g3_center = center + sigma0 * np.array(centers)
 
-    # The factor "a" is not for a guess based on a single line 
-    #a = sigma / (heights[0] * g1_sigma + heights[1] * g2_sigma + heights[2] * g3_sigma)
-    g1_height, g2_height, g3_height =  height * np.array(heights)
+    # The factor "a" is not for a guess based on a single line
+    # a = sigma / (heights[0] * g1_sigma + heights[1] * g2_sigma + heights[2] * g3_sigma)
+    g1_height, g2_height, g3_height = height * np.array(heights)
 
     pars = self.make_params(
         g1_height=g1_height,
@@ -480,6 +530,7 @@ def _guess_multiline3(
 
     return lmfit.models.update_param_vals(pars, self.prefix, **kwargs)
 
+
 def _guess_multiline2(
     self,
     data,
@@ -494,55 +545,54 @@ def _guess_multiline2(
 ):
     """Estimate initial model parameter values from data.
 
-   This version is for fitting 2  emission lines that are near each other 
-   (e.g. [OII] doublet). It is currently hard coded to use the middle Gaussian (g2) as the line
-   that is focused on, and then shifts the other Gaussian relative to that. By default 
-   it uses the bounds on g2 set in model.set_param_hint. This can be overwritten by specifying
-   focus_lam = [start wavelength, end wavelength] of your region that you want to use to guide
-   your initial guesses. 
+    This version is for fitting 2  emission lines that are near each other
+    (e.g. [OII] doublet). It is currently hard coded to use the middle Gaussian (g2) as the line
+    that is focused on, and then shifts the other Gaussian relative to that. By default
+    it uses the bounds on g2 set in model.set_param_hint. This can be overwritten by specifying
+    focus_lam = [start wavelength, end wavelength] of your region that you want to use to guide
+    your initial guesses.
 
-    Parameters
-    ----------
-    data : array_like
-        Array of data (i.e., y-values) to use to guess parameter values.
-    x : array_like
-        Array of values for the independent variable (i.e., x-values).
-    sigma0 : float, optional
-        Sets the reference value for computing sigmas and centers, by default None.
-        If None, this will be set to the sigma returned from :func:`guess_from_peak`,
-        which is related to FWHM.
-    heights : array_like of floats of length 2, optional
-        A list containing relative heights of [g1_height, g2_height],
-        by default (1,4).
-        These will have an overall scale factor computed, so no need to normalize.
-    sigma_factors : array_like of floats of length 2, optional
-        [g1_sigma, g2_sigma] = `sigma0` * sigma_factors, by default (1,1)
-    centers : array_like of floats of length 2, optional
-        Change from the 1 gaussian guessed center, in units of `sigma0` unless
-        `absolute_centers` is True, by default (-1,0)
-        [g1_center, g2_center] = center + `sigma0` * `centers`
-    absolute_centers : bool, optional
-        If True, modifies the centers equation to:
-        [g1_center, g2_center] = center + `centers`, by default False
-    focus_lam : array_like of floats of length 2, optional
-        Sets the wavelength range of the guess region for g2, by default None.
-        If None, this will be set to the model's param_hint for 'g2_center' [min, max].
-        If the param_hint min/max is not set, then the min/max of x is used.
-    **kws : optional
-        Additional keyword arguments, passed to model function.
+     Parameters
+     ----------
+     data : array_like
+         Array of data (i.e., y-values) to use to guess parameter values.
+     x : array_like
+         Array of values for the independent variable (i.e., x-values).
+     sigma0 : float, optional
+         Sets the reference value for computing sigmas and centers, by default None.
+         If None, this will be set to the sigma returned from :func:`guess_from_peak`,
+         which is related to FWHM.
+     heights : array_like of floats of length 2, optional
+         A list containing relative heights of [g1_height, g2_height],
+         by default (1,4).
+         These will have an overall scale factor computed, so no need to normalize.
+     sigma_factors : array_like of floats of length 2, optional
+         [g1_sigma, g2_sigma] = `sigma0` * sigma_factors, by default (1,1)
+     centers : array_like of floats of length 2, optional
+         Change from the 1 gaussian guessed center, in units of `sigma0` unless
+         `absolute_centers` is True, by default (-1,0)
+         [g1_center, g2_center] = center + `sigma0` * `centers`
+     absolute_centers : bool, optional
+         If True, modifies the centers equation to:
+         [g1_center, g2_center] = center + `centers`, by default False
+     focus_lam : array_like of floats of length 2, optional
+         Sets the wavelength range of the guess region for g2, by default None.
+         If None, this will be set to the model's param_hint for 'g2_center' [min, max].
+         If the param_hint min/max is not set, then the min/max of x is used.
+     **kws : optional
+         Additional keyword arguments, passed to model function.
 
-    Returns
-    -------
-    params : :class:`~lmfit.parameter.Parameters`
-        Initial, guessed values for the parameters of a Model.
+     Returns
+     -------
+     params : :class:`~lmfit.parameter.Parameters`
+         Initial, guessed values for the parameters of a Model.
     """
     if focus_lam is None:
-        focus_lam = [np.min(x),np.max(x)]
-        focus_lam[0] = self.param_hints['g2_center'].get('min',focus_lam[0])
-        focus_lam[1] = self.param_hints['g2_center'].get('max',focus_lam[1])
+        focus_lam = [np.min(x), np.max(x)]
+        focus_lam[0] = self.param_hints["g2_center"].get("min", focus_lam[0])
+        focus_lam[1] = self.param_hints["g2_center"].get("max", focus_lam[1])
 
-
-    focus_index = (x > focus_lam[0]) &  (x < focus_lam[1])
+    focus_index = (x > focus_lam[0]) & (x < focus_lam[1])
 
     height, center, sigma = guess_from_peak(data[focus_index], x[focus_index])
     constant = mean_edges(data, edge_fraction=0.1)
@@ -554,13 +604,13 @@ def _guess_multiline2(
     # calculate component guesses based off 1gauss guess and function parameters
     g1_sigma, g2_sigma = sigma0 * np.array(sigma_factors)
     if absolute_centers:
-        g1_center, g2_center  = center + np.array(centers)
+        g1_center, g2_center = center + np.array(centers)
     else:
-        g1_center, g2_center  = center + sigma0 * np.array(centers)
+        g1_center, g2_center = center + sigma0 * np.array(centers)
 
-    # The factor "a" is not for a guess based on a single line 
-    #a = sigma / (heights[0] * g1_sigma + heights[1] * g2_sigma + heights[2] * g3_sigma)
-    g1_height, g2_height =  height * np.array(heights)
+    # The factor "a" is not for a guess based on a single line
+    # a = sigma / (heights[0] * g1_sigma + heights[1] * g2_sigma + heights[2] * g3_sigma)
+    g1_height, g2_height = height * np.array(heights)
 
     pars = self.make_params(
         g1_height=g1_height,
@@ -573,7 +623,6 @@ def _guess_multiline2(
     )
 
     return lmfit.models.update_param_vals(pars, self.prefix, **kwargs)
-
 
 
 def _guess_3gauss_old(
@@ -695,9 +744,7 @@ class GaussianModelH(lmfit.Model):
     flux_factor = np.sqrt(2 * np.pi)
     """float: Factor used to create :func:`flux_expr`."""
 
-    def __init__(
-        self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs  # noqa
-    ):
+    def __init__(self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs):  # noqa
         kwargs.update(
             {
                 "prefix": prefix,
@@ -755,9 +802,7 @@ class Const_1GaussModel(lmfit.model.CompositeModel):
     'c']
     """
 
-    def __init__(
-        self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs  # noqa
-    ):
+    def __init__(self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs):  # noqa
         kwargs.update({"nan_policy": nan_policy, "independent_vars": independent_vars})
         if prefix != "":
             print(
@@ -806,9 +851,7 @@ class Quadratic_1GaussModel(lmfit.model.CompositeModel):
     'c']
     """
 
-    def __init__(
-        self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs  # noqa
-    ):
+    def __init__(self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs):  # noqa
         kwargs.update({"nan_policy": nan_policy, "independent_vars": independent_vars})
         if prefix != "":
             print(
@@ -835,6 +878,40 @@ class Quadratic_1GaussModel(lmfit.model.CompositeModel):
     __init__.__doc__ = lmfit.models.COMMON_INIT_DOC
 
 
+class Const_2GaussModel_fast(lmfit.Model):
+    """The fast evaluation version of Const_2GaussModel.
+    It is created using lmfit.Model instead of CompositeModel.
+    """
+
+    fwhm_factor = 2 * np.sqrt(2 * np.log(2))
+    """float: Factor used to create :func:`lmfit.models.fwhm_expr`."""
+    flux_factor = np.sqrt(2 * np.pi)
+    """float: Factor used to create :func:`flux_expr`."""
+
+    def __init__(self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs):  # noqa
+        kwargs.update(
+            {
+                "prefix": prefix,
+                "nan_policy": nan_policy,
+                "independent_vars": independent_vars,
+            }
+        )
+        super().__init__(gaussian3CH, **kwargs)
+        self._set_paramhints_prefix()
+
+    def _set_paramhints_prefix(self):
+        comp_pre = ["g1_", "g2_"]
+        for comp in comp_pre:
+            self.set_param_hint(comp + "sigma", min=0)
+            self.set_param_hint(comp + "height", min=0)
+            self.set_param_hint(comp + "fwhm", expr=fwhm_expr_fast(self, comp))
+            self.set_param_hint(comp + "flux", expr=flux_expr_fast(self, comp))
+
+    guess = _guess_2gauss
+
+    __init__.__doc__ = lmfit.models.COMMON_INIT_DOC
+
+
 class Const_2GaussModel(lmfit.model.CompositeModel):
     """Constant + 2 Gaussians Model.
 
@@ -852,9 +929,7 @@ class Const_2GaussModel(lmfit.model.CompositeModel):
     'c']
     """
 
-    def __init__(
-        self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs  # noqa
-    ):
+    def __init__(self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs):  # noqa
         kwargs.update({"nan_policy": nan_policy, "independent_vars": independent_vars})
         if prefix != "":
             print(
@@ -904,9 +979,7 @@ class Quadratic_2GaussModel(lmfit.model.CompositeModel):
     'a','b','c']
     """
 
-    def __init__(
-        self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs  # noqa
-    ):
+    def __init__(self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs):  # noqa
         kwargs.update({"nan_policy": nan_policy, "independent_vars": independent_vars})
         if prefix != "":
             print(
@@ -934,6 +1007,40 @@ class Quadratic_2GaussModel(lmfit.model.CompositeModel):
     __init__.__doc__ = lmfit.models.COMMON_INIT_DOC
 
 
+class Const_3GaussModel_fast(lmfit.Model):
+    """The fast evaluation version of Const_3GaussModel.
+    It is created using lmfit.Model instead of CompositeModel.
+    """
+
+    fwhm_factor = 2 * np.sqrt(2 * np.log(2))
+    """float: Factor used to create :func:`lmfit.models.fwhm_expr`."""
+    flux_factor = np.sqrt(2 * np.pi)
+    """float: Factor used to create :func:`flux_expr`."""
+
+    def __init__(self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs):  # noqa
+        kwargs.update(
+            {
+                "prefix": prefix,
+                "nan_policy": nan_policy,
+                "independent_vars": independent_vars,
+            }
+        )
+        super().__init__(gaussian3CH, **kwargs)
+        self._set_paramhints_prefix()
+
+    def _set_paramhints_prefix(self):
+        comp_pre = ["g1_", "g2_", "g3_"]
+        for comp in comp_pre:
+            self.set_param_hint(comp + "sigma", min=0)
+            self.set_param_hint(comp + "height", min=0)
+            self.set_param_hint(comp + "fwhm", expr=fwhm_expr_fast(self, comp))
+            self.set_param_hint(comp + "flux", expr=flux_expr_fast(self, comp))
+
+    guess = _guess_3gauss
+
+    __init__.__doc__ = lmfit.models.COMMON_INIT_DOC
+
+
 class Const_3GaussModel(lmfit.model.CompositeModel):
     """Constant + 3 Gaussians Model.
 
@@ -954,9 +1061,7 @@ class Const_3GaussModel(lmfit.model.CompositeModel):
     'c']
     """
 
-    def __init__(
-        self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs  # noqa
-    ):
+    def __init__(self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs):  # noqa
         kwargs.update({"nan_policy": nan_policy, "independent_vars": independent_vars})
         if prefix != "":
             print(
@@ -1005,9 +1110,7 @@ class Quadratic_3GaussModel(lmfit.model.CompositeModel):
     'a','b','c']
     """
 
-    def __init__(
-        self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs  # noqa
-    ):
+    def __init__(self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs):  # noqa
         kwargs.update({"nan_policy": nan_policy, "independent_vars": independent_vars})
         if prefix != "":
             print(
@@ -1083,9 +1186,7 @@ def set_common_limits(params, x, data):
         elif k.endswith("center"):
             param.set(min=x[limit], max=x[-limit])
         elif k == "c":
-            param.set(
-                min=param.value - 2 * baseline_std, max=param.value + 2 * baseline_std
-            )
+            param.set(min=param.value - 2 * baseline_std, max=param.value + 2 * baseline_std)
     return params
 
 
@@ -1110,9 +1211,7 @@ class Log10_DoubleExponentialModel(lmfit.model.CompositeModel):
     The param names are ['e1_amplitude','e1_decay','e2_amplitude','e2_decay']
     """
 
-    def __init__(
-        self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs  # noqa
-    ):
+    def __init__(self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs):  # noqa
         kwargs.update({"nan_policy": nan_policy, "independent_vars": independent_vars})
         if prefix != "":
             print(
@@ -1161,7 +1260,7 @@ class Log10_DoubleExponentialModel(lmfit.model.CompositeModel):
             Initial, guessed values for the parameters of a Model.
         """
         # guess e1_ using ExpontialModel guess function.
-        init_params = lmfit.models.ExponentialModel().guess(10 ** data, x, **kwargs)
+        init_params = lmfit.models.ExponentialModel().guess(10**data, x, **kwargs)
 
         e1_amplitude = init_params["amplitude"].value
         e1_decay = init_params["decay"].value
