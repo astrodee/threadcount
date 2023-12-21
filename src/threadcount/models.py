@@ -896,7 +896,7 @@ class Const_2GaussModel_fast(lmfit.Model):
                 "independent_vars": independent_vars,
             }
         )
-        super().__init__(gaussian3CH, **kwargs)
+        super().__init__(gaussian2CH, **kwargs)
         self._set_paramhints_prefix()
 
     def _set_paramhints_prefix(self):
