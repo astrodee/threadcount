@@ -59,6 +59,30 @@ def gaussian3CH(
     return f
 
 
+def gaussian3CH_d(
+    x,
+    g1_height=1.0,
+    deltax=0.0,
+    g1_sigma=1.0,
+    g2_height=1.0,
+    g2_center=0.0,
+    g2_sigma=1.0,
+    g3_height=1.0,
+    deltaxhi=0.0,
+    g3_sigma=1.0,
+    c=0.0,
+):
+    """Return a 3-Gaussian function in 1-dimension."""
+    f = (
+        g1_height * np.exp(-((1.0 * x - g2_center - deltax) ** 2) / max(tiny, (2 * g1_sigma**2)))
+        + g2_height * np.exp(-((1.0 * x - g2_center) ** 2) / max(tiny, (2 * g2_sigma**2)))
+        + g3_height
+        * np.exp(-((1.0 * x - g2_center - deltaxhi) ** 2) / max(tiny, (2 * g3_sigma**2)))
+        + c
+    )
+    return f
+
+
 def flux_expr(model):
     """Return constraint expression for line flux."""
     fmt = "{factor:.7f}*{prefix:s}height*{prefix:s}sigma"
@@ -427,6 +451,49 @@ def _guess_3gauss(
         g2_sigma=g2_sigma,
         g3_height=g3_height,
         g3_center=g3_center,
+        g3_sigma=g3_sigma,
+        c=constant,
+    )
+
+    return lmfit.models.update_param_vals(pars, self.prefix, **kwargs)
+
+
+def _guess_3gauss_d(
+    self,
+    data,
+    x,
+    sigma0=None,
+    heights=(1, 4, 1),
+    sigma_factors=(1, 1, 1),
+    centers=(-1, 1),
+    **kwargs
+):
+    """Estimate initial model parameter values from data.
+    Used for fast model.
+    """
+    height, center, sigma = guess_from_peak(data, x)
+    constant = mean_edges(data, edge_fraction=0.1)
+
+    # fill in any missing function parameters based on 1gauss guess:
+    if sigma0 is None:
+        sigma0 = sigma
+
+    # calculate component guesses based off 1gauss guess and function parameters
+    g1_sigma, g2_sigma, g3_sigma = sigma0 * np.array(sigma_factors)
+    deltax, deltaxhi = sigma0 * np.array(centers)
+
+    a = sigma / (heights[0] * g1_sigma + heights[1] * g2_sigma + heights[2] * g3_sigma)
+    g1_height, g2_height, g3_height = a * height * np.array(heights)
+
+    pars = self.make_params(
+        deltax=deltax,
+        deltaxhi=deltaxhi,
+        g1_height=g1_height,
+        g1_sigma=g1_sigma,
+        g2_height=g2_height,
+        g2_center=center,
+        g2_sigma=g2_sigma,
+        g3_height=g3_height,
         g3_sigma=g3_sigma,
         c=constant,
     )
@@ -1025,7 +1092,7 @@ class Const_3GaussModel_fast(lmfit.Model):
                 "independent_vars": independent_vars,
             }
         )
-        super().__init__(gaussian3CH, **kwargs)
+        super().__init__(gaussian3CH_d, **kwargs)
         self._set_paramhints_prefix()
 
     def _set_paramhints_prefix(self):
@@ -1035,8 +1102,10 @@ class Const_3GaussModel_fast(lmfit.Model):
             self.set_param_hint(comp + "height", min=0)
             self.set_param_hint(comp + "fwhm", expr=fwhm_expr_fast(self, comp))
             self.set_param_hint(comp + "flux", expr=flux_expr_fast(self, comp))
+        self.set_param_hint("g1_center", expr="g2_center+deltax")
+        self.set_param_hint("g3_center", expr="g2_center+deltaxhi")
 
-    guess = _guess_3gauss
+    guess = _guess_3gauss_d
 
     __init__.__doc__ = lmfit.models.COMMON_INIT_DOC
 
