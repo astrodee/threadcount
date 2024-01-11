@@ -465,7 +465,8 @@ def _guess_3gauss_d(
     sigma0=None,
     heights=(1, 4, 1),
     sigma_factors=(1, 1, 1),
-    centers=(-1, 1),
+    centers=(-1, 0, 1),
+    absolute_centers=False,
     **kwargs
 ):
     """Estimate initial model parameter values from data.
@@ -480,7 +481,13 @@ def _guess_3gauss_d(
 
     # calculate component guesses based off 1gauss guess and function parameters
     g1_sigma, g2_sigma, g3_sigma = sigma0 * np.array(sigma_factors)
-    deltax, deltaxhi = sigma0 * np.array(centers)
+    if absolute_centers:
+        g1_center, g2_center, g3_center = center + np.array(centers)
+    else:
+        g1_center, g2_center, g3_center = center + sigma0 * np.array(centers)
+
+    deltax = g1_center - g2_center
+    deltaxhi = g3_center - g2_center
 
     a = sigma / (heights[0] * g1_sigma + heights[1] * g2_sigma + heights[2] * g3_sigma)
     g1_height, g2_height, g3_height = a * height * np.array(heights)
@@ -491,7 +498,7 @@ def _guess_3gauss_d(
         g1_height=g1_height,
         g1_sigma=g1_sigma,
         g2_height=g2_height,
-        g2_center=center,
+        g2_center=g2_center,
         g2_sigma=g2_sigma,
         g3_height=g3_height,
         g3_sigma=g3_sigma,
