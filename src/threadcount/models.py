@@ -2,7 +2,7 @@
 import numpy as np
 import operator
 
-from numba import jit
+from numba import njit
 import lmfit
 from . import lmfit_ext  # noqa: F401
 
@@ -60,7 +60,7 @@ def gaussian3CH(
     return f
 
 
-@jit
+@njit
 def gaussian3CH_d(
     x,
     g1_height=1.0,
