@@ -131,7 +131,8 @@ def run(s):  # noqa: C901
         iterate,
     )
     print("finish pooling")
-    out = np.array(results).reshape(spatial_shape)
+    fit_results_T[:] = np.array(results).reshape(fit_results_T.shape)
+
     # for idx in iterate:
     #     print("idx: ", idx)
     #     sp = subcube_av[(slice(None), *idx)]
