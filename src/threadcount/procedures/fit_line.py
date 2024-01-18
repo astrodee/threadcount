@@ -1,6 +1,50 @@
 import numpy as np
 import threadcount as tc
 from itertools import tee
+import multiprocessing as mp
+from functools import partial
+
+ctx = mp.get_context("fork")
+
+
+def _process_single_spectrum(subcube_av, snr_image, snr_threshold, models, s, fit_results_T, idx):
+    print("index: ", idx)
+    sp = subcube_av[(slice(None), *idx)]
+    # this below line is how I originally tried this, and it works.
+    # for sp, idx in mpdaf.obj.iter_spe(subcube_av, index=True):
+    # Test if it passes the SNR test:
+    if (snr_image[idx] < snr_threshold) or (np.isnan(snr_image[idx]) is True):
+        # fit_results_T[idx] = [None] * len(models)
+        return
+
+    # Fit the least complex model, and make sure of success.
+    spec_to_fit = sp
+    f = spec_to_fit.lmfit(models[0], **s.lmfit_kwargs)
+    if f is None:
+        # fit_results_T[idx] = [None] * len(models)
+        return
+
+    if f.success is False:
+        # One reason we saw for 1 gaussian fit to fail includes the iron line when
+        # fitting 5007. Therefore, if there is a failure to fit 1 gaussian, I will
+        # cut down the x axis by 5AA on each side and try again.
+        wave_range = sp.get_range()
+        print("cutting spectrum by +/- 5A for pixel {}".format(idx))
+        cut_sp = sp.subspec(wave_range[0] + 5, wave_range[1] - 5)
+        spec_to_fit = cut_sp
+        f = spec_to_fit.lmfit(models[0], **s.lmfit_kwargs)
+        if f.success is False:
+            # fit_results_T[idx] = [None] * len(models)
+            return
+
+    # at this point: if the first model has failed to fit both times, we don't
+    # even reach this point, the loop continues. However, if the first model
+    # fit the first time, then spec_to_fit = sp. If the first model failed the
+    # first time and succeeded the second time, then spec_to_fit = cut_sp.
+
+    # continue with the rest of the models.
+    rest = [spec_to_fit.lmfit(model, **s.lmfit_kwargs) for model in models[1:]]
+    return [f] + rest
 
 
 def run(s):  # noqa: C901
@@ -15,7 +59,7 @@ def run(s):  # noqa: C901
     # initialize baseline results:
     if not hasattr(s, "baseline_results"):
         s.baseline_results = [None] * len(s.lines)
-    
+
     # create a subcube, and region average each of the wavelength channels.
     # creating a subcube like this is a view into the original cube, and doesn't copy
     # the data, so any change to subcube changes cube.
@@ -34,7 +78,6 @@ def run(s):  # noqa: C901
     # Determine the SNR for each spaxel.
     # This default way to get the snr image:
     snr_image = tc.fit.get_SNR_map(subcube_av)
-
 
     # Subtract the continuum:
     if subcontinuum_av:
@@ -79,44 +122,55 @@ def run(s):  # noqa: C901
         )
         s.baseline_results[s._i] = baseline_fitresults
 
-    for idx in iterate:
-        sp = subcube_av[(slice(None), *idx)]
-        # this below line is how I originally tried this, and it works.
-        # for sp, idx in mpdaf.obj.iter_spe(subcube_av, index=True):
-        # Test if it passes the SNR test:
-        if (snr_image[idx] < snr_threshold) or (np.isnan(snr_image[idx])==True):
-            # fit_results_T[idx] = [None] * len(models)
-            continue
+    pool = ctx.Pool(processes=4)
+    print("start pooling")
+    results = pool.map(
+        partial(
+            _process_single_spectrum, subcube_av, snr_image, snr_threshold, models, s, fit_results_T
+        ),
+        iterate,
+    )
+    print("finish pooling")
+    out = np.array(results).reshape(spatial_shape)
+    # for idx in iterate:
+    #     print("idx: ", idx)
+    #     sp = subcube_av[(slice(None), *idx)]
+    #     # this below line is how I originally tried this, and it works.
+    #     # for sp, idx in mpdaf.obj.iter_spe(subcube_av, index=True):
+    #     # Test if it passes the SNR test:
+    #     if (snr_image[idx] < snr_threshold) or (np.isnan(snr_image[idx])==True):
+    #         # fit_results_T[idx] = [None] * len(models)
+    #         continue
 
-        # Fit the least complex model, and make sure of success.
-        spec_to_fit = sp
-        f = spec_to_fit.lmfit(models[0], **s.lmfit_kwargs)
-        if f is None:
-            # fit_results_T[idx] = [None] * len(models)
-            continue
+    #     # Fit the least complex model, and make sure of success.
+    #     spec_to_fit = sp
+    #     f = spec_to_fit.lmfit(models[0], **s.lmfit_kwargs)
+    #     if f is None:
+    #         # fit_results_T[idx] = [None] * len(models)
+    #         continue
 
-        if f.success is False:
-            # One reason we saw for 1 gaussian fit to fail includes the iron line when
-            # fitting 5007. Therefore, if there is a failure to fit 1 gaussian, I will
-            # cut down the x axis by 5AA on each side and try again.
-            wave_range = sp.get_range()
-            print("cutting spectrum by +/- 5A for pixel {}".format(idx))
-            cut_sp = sp.subspec(wave_range[0] + 5, wave_range[1] - 5)
-            spec_to_fit = cut_sp
-            f = spec_to_fit.lmfit(models[0], **s.lmfit_kwargs)
-            if f.success is False:
-                # fit_results_T[idx] = [None] * len(models)
-                continue
+    #     if f.success is False:
+    #         # One reason we saw for 1 gaussian fit to fail includes the iron line when
+    #         # fitting 5007. Therefore, if there is a failure to fit 1 gaussian, I will
+    #         # cut down the x axis by 5AA on each side and try again.
+    #         wave_range = sp.get_range()
+    #         print("cutting spectrum by +/- 5A for pixel {}".format(idx))
+    #         cut_sp = sp.subspec(wave_range[0] + 5, wave_range[1] - 5)
+    #         spec_to_fit = cut_sp
+    #         f = spec_to_fit.lmfit(models[0], **s.lmfit_kwargs)
+    #         if f.success is False:
+    #             # fit_results_T[idx] = [None] * len(models)
+    #             continue
 
-        # at this point: if the first model has failed to fit both times, we don't
-        # even reach this point, the loop continues. However, if the first model
-        # fit the first time, then spec_to_fit = sp. If the first model failed the
-        # first time and succeeded the second time, then spec_to_fit = cut_sp.
+    #     # at this point: if the first model has failed to fit both times, we don't
+    #     # even reach this point, the loop continues. However, if the first model
+    #     # fit the first time, then spec_to_fit = sp. If the first model failed the
+    #     # first time and succeeded the second time, then spec_to_fit = cut_sp.
 
-        # continue with the rest of the models.
-        rest = [spec_to_fit.lmfit(model, **s.lmfit_kwargs) for model in models[1:]]
-        fit_results_T[idx] = [f] + rest
-    
+    #     # continue with the rest of the models.
+    #     rest = [spec_to_fit.lmfit(model, **s.lmfit_kwargs) for model in models[1:]]
+    #     fit_results_T[idx] = [f] + rest
+
     s.model_results = fit_results
     print("Finished the fits.")
 
@@ -134,9 +188,7 @@ def run(s):  # noqa: C901
     keys_to_save = tc.fit.get_model_keys(models[-1], ignore=["fwhm"])
     # label_row = tc.fit.create_label_row_mc(keys_to_save)
     fit_info = ["success", "chisqr", "redchi"]
-    mc_label_row = tc.fit.extract_spaxel_info_mc(
-        None, fit_info, keys_to_save, names_only=True
-    )
+    mc_label_row = tc.fit.extract_spaxel_info_mc(None, fit_info, keys_to_save, names_only=True)
     # create output arrays:
     img_modelresults = np.empty(spatial_shape, dtype=object)
     img_mc_output = np.empty((len(mc_label_row),) + spatial_shape)
@@ -220,7 +272,6 @@ def save_files(
     oneG_result_dict.savetxt(oneG_filename)
 
     if len(models) > 1:
-
         most_param_names = sorted(models[-1].make_params().valerrsdict().keys())
         choice_result_dict = tc.fit.ResultDict(
             data_dict={"snr": snr_image.data.data, "choice": final_choices}
