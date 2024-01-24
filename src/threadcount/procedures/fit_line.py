@@ -15,14 +15,14 @@ def _process_single_spectrum(subcube_av, snr_image, snr_threshold, models, s, fi
     # Test if it passes the SNR test:
     if (snr_image[idx] < snr_threshold) or (np.isnan(snr_image[idx]) is True):
         # fit_results_T[idx] = [None] * len(models)
-        return None
+        return [None]
 
     # Fit the least complex model, and make sure of success.
     spec_to_fit = sp
     f = spec_to_fit.lmfit(models[0], **s.lmfit_kwargs)
     if f is None:
         # fit_results_T[idx] = [None] * len(models)
-        return None
+        return [None]
 
     if f.success is False:
         # One reason we saw for 1 gaussian fit to fail includes the iron line when
@@ -35,7 +35,7 @@ def _process_single_spectrum(subcube_av, snr_image, snr_threshold, models, s, fi
         f = spec_to_fit.lmfit(models[0], **s.lmfit_kwargs)
         if f.success is False:
             # fit_results_T[idx] = [None] * len(models)
-            return None
+            return [None]
 
     # at this point: if the first model has failed to fit both times, we don't
     # even reach this point, the loop continues. However, if the first model
