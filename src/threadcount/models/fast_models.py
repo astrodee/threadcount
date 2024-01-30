@@ -15,6 +15,7 @@ __all__ = [
     "gaussian3CH_d",
     "_guess_2gauss_d",
     "_guess_3gauss_d",
+    "_guess_multiline2_d",
 ]
 
 
@@ -239,3 +240,58 @@ class Const_3GaussModel_fast(lmfit.Model):
     guess = _guess_3gauss_d
 
     __init__.__doc__ = lmfit.models.COMMON_INIT_DOC
+
+
+def _guess_multiline2_d(
+    self,
+    data,
+    x,
+    sigma0=None,
+    heights=(1, 4),
+    sigma_factors=(1, 1),
+    centers=(-1, 0),
+    absolute_centers=False,
+    focus_lam=None,
+    **kwargs
+):
+    """Estimate initial model parameter values from data.
+    Used for fast models.
+    """
+    if focus_lam is None:
+        focus_lam = [np.min(x), np.max(x)]
+        focus_lam[0] = self.param_hints["g2_center"].get("min", focus_lam[0])
+        focus_lam[1] = self.param_hints["g2_center"].get("max", focus_lam[1])
+
+    focus_index = (x > focus_lam[0]) & (x < focus_lam[1])
+
+    height, center, sigma = guess_from_peak(data[focus_index], x[focus_index])
+    constant = mean_edges(data, edge_fraction=0.1)
+
+    # fill in any missing function parameters based on 1gauss guess:
+    if sigma0 is None:
+        sigma0 = sigma
+
+    # calculate component guesses based off 1gauss guess and function parameters
+    g1_sigma, g2_sigma = sigma0 * np.array(sigma_factors)
+    if absolute_centers:
+        g1_center, g2_center = center + np.array(centers)
+    else:
+        g1_center, g2_center = center + sigma0 * np.array(centers)
+
+    deltax = g1_center - g2_center
+
+    # The factor "a" is not for a guess based on a single line
+    # a = sigma / (heights[0] * g1_sigma + heights[1] * g2_sigma + heights[2] * g3_sigma)
+    g1_height, g2_height = height * np.array(heights)
+
+    pars = self.make_params(
+        deltax=deltax,
+        g1_height=g1_height,
+        g1_sigma=g1_sigma,
+        g2_height=g2_height,
+        g2_center=g2_center,
+        g2_sigma=g2_sigma,
+        c=constant,
+    )
+
+    return lmfit.models.update_param_vals(pars, self.prefix, **kwargs)
