@@ -122,17 +122,24 @@ def run(s):  # noqa: C901
         )
         s.baseline_results[s._i] = baseline_fitresults
 
-    pool = ctx.Pool(processes=4)
-    print("start pooling")
-    results = pool.map(
-        partial(
-            _process_single_spectrum, subcube_av, snr_image, snr_threshold, models, s, fit_results_T
-        ),
-        iterate,
-    )
-    print("finish pooling")
-    print("number of results: ", len(results))
-    fit_results_T[:] = np.array(results, dtype=object).reshape(fit_results_T.shape)
+    if s.parallel:
+        pool = ctx.Pool(processes=s.n_process)
+        print("start pooling")
+        results = pool.map(
+            partial(
+                _process_single_spectrum,
+                subcube_av,
+                snr_image,
+                snr_threshold,
+                models,
+                s,
+                fit_results_T,
+            ),
+            iterate,
+        )
+        print("finish pooling")
+        print("number of results: ", len(results))
+        fit_results_T[:] = np.array(results, dtype=object).reshape(fit_results_T.shape)
     # for idx in iterate:
     #     print("idx: ", idx)
     #     sp = subcube_av[(slice(None), *idx)]
