@@ -8,7 +8,14 @@ from .basic import guess_from_peak, mean_edges
 
 tiny = lmfit.models.tiny  # 1.0e-15
 
-__all__ = ["Const_3GaussModel_fast", "gaussian3CH_d"]
+__all__ = [
+    "Const_2GaussModel_fast",
+    "Const_3GaussModel_fast",
+    "gaussian2CH_d",
+    "gaussian3CH_d",
+    "_guess_2gauss_d",
+    "_guess_3gauss_d",
+]
 
 
 def fwhm_expr_fast(model, comp_pre):

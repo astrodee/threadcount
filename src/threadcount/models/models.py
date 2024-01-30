@@ -13,13 +13,20 @@ __all__ = [
     "Const_2GaussModel",
     "Const_3GaussModel",
     "GaussianModelH",
-    "gaussianH",
     "Log10_DoubleExponentialModel",
     "Quadratic_1GaussModel",
     "Quadratic_2GaussModel",
     "Quadratic_3GaussModel",
+    "gaussianH",
     "gaussian2CH",
     "gaussian3CH",
+    "_guess_1gauss",
+    "_guess_2gauss",
+    "_guess_2gauss_old",
+    "_guess_3gauss",
+    "_guess_3gauss_old",
+    "_guess_multiline2",
+    "_guess_multiline3",
 ]
 
 
