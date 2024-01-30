@@ -119,10 +119,7 @@ def plot2(
         fig_kws_.update(fig_kws)
 
     if len(self.model.independent_vars) != 1:
-        print(
-            "Fit can only be plotted if the model function has one "
-            "independent variable."
-        )
+        print("Fit can only be plotted if the model function has one " "independent variable.")
         return False
 
     if not isinstance(fig, (plt.Figure, mpl.figure.SubFigure)):
@@ -165,7 +162,13 @@ def plot2(
 
 
 def plot_components(
-    self, ax=None, show_combined=True, alpha=1, log=False, keep_ylim=True, zorder=-10,
+    self,
+    ax=None,
+    show_combined=True,
+    alpha=1,
+    log=False,
+    keep_ylim=True,
+    zorder=-10,
 ):
     from matplotlib import pyplot as plt
 
@@ -292,19 +295,17 @@ def mc_iter(self, n_mc_iterations=0, distribution="normal"):
     # print(params)
 
     if distribution == "normal":
-        distribution_fcn = np.random.default_rng().normal
+        distribution_fcn = np.random.default_rng(42).normal
         input1 = data  # loc ("center")
         input2 = sigma  # scale ("standard deviation")
     elif distribution == "uniform":
-        distribution_fcn = np.random.default_rng().uniform
+        distribution_fcn = np.random.default_rng(42).uniform
         input1 = data - 2 * sigma  # low
         input2 = data + 2 * sigma  # high
     else:
         raise NotImplementedError("distribution " + distribution + " not implemented.")
     # use the above definitions to calculate the monte carlo iterations.
-    mc_data = distribution_fcn(
-        input1, input2, (n_mc_iterations, np.broadcast(input1, input2).size)
-    )
+    mc_data = distribution_fcn(input1, input2, (n_mc_iterations, np.broadcast(input1, input2).size))
     mc_fits = [self]
     for mcd in mc_data:
         modelresult = copy(self)
@@ -331,7 +332,7 @@ def order_gauss(self, delta_x=0.5):
     # shifting things around can get messy when there are expressions involved.
     # First things first: Lets remove all expressions.
     for p in self.values():
-        p.set(expr='')
+        p.set(expr="")
 
     ngauss = sum([x.startswith("g") and x.endswith("_sigma") for x in self])
     if ngauss in (0, 1):
