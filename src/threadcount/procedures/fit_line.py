@@ -4,10 +4,19 @@ from itertools import tee
 import multiprocessing as mp
 from functools import partial
 
-ctx = mp.get_context("fork")
+mpException = None
+try:
+    ctx = mp.get_context("fork")
+except ValueError as exc:
+    mpException = exc
+    ctx = None
 
 
 def run(s):  # noqa: C901
+    if s.parallel and ctx is None:
+        raise ValueError(
+            'Cannot run parallel, please set setting "parallel" to False in runner file.'
+        ) from mpException
     cube = s.cube
     continuum_cube = s.continuum_cube
     k = s.kernel

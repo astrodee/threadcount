@@ -102,6 +102,8 @@ def run(user_settings):
         # Options to include Monte Carlo iterations on the "best" fit.
         "mc_snr": 25,  # SNR below which the monte carlo is run.
         "mc_n_iterations": 20,  # number of monte carlo fits for each spaxel.
+        "parallel": False,  # whether invoke multiprocess (not available on windows)
+        "n_process": 4,  # number of processes used in multiprocessing; activated when parallel is True
     }
 
     # test if cube has been opened. if not, open cube and deredshift.
