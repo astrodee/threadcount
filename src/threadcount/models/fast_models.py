@@ -6,14 +6,18 @@ from numba import njit
 import lmfit
 
 from .basic import guess_from_peak, mean_edges
+from .models import _guess_1gauss
 
 tiny = lmfit.models.tiny  # 1.0e-15
 
 __all__ = [
+    "Const_1GaussModel_fast",
     "Const_2GaussModel_fast",
     "Const_3GaussModel_fast",
+    "gaussian1CH_d",
     "gaussian2CH_d",
     "gaussian3CH_d",
+    "_guess_1gauss_d",
     "_guess_2gauss_d",
     "_guess_3gauss_d",
     "_guess_multiline2_d",
@@ -31,6 +35,22 @@ def flux_expr_fast(model, comp_pre):
     """Return constraint expression for line flux of one component."""
     fmt = "{factor:.7f}*{prefix:s}height*{prefix:s}sigma"
     return fmt.format(factor=model.flux_factor, prefix=model.prefix + comp_pre)
+
+
+@njit
+def gaussian1CH_d(
+    x,
+    g1_height=1.0,
+    g1_center=0.0,
+    g1_sigma=1.0,
+    c=0.0,
+):
+    """Return a 1-Gaussian function in 1-dimension."""
+    f = (
+        g1_height * np.exp(-((1.0 * x - g1_center) ** 2) / max(tiny, (2 * g1_sigma**2)))
+        + c
+    )
+    return f
 
 
 @njit
@@ -82,6 +102,9 @@ def gaussian3CH_d(
         + c
     )
     return f
+
+
+_guess_1gauss_d = _guess_1gauss
 
 
 def _guess_2gauss_d(
@@ -178,6 +201,45 @@ def _guess_3gauss_d(
     )
 
     return lmfit.models.update_param_vals(pars, self.prefix, **kwargs)
+
+
+class Const_1GaussModel_fast(lmfit.Model):
+    """The fast evaluation version of Const_1GaussModel.
+    It is created using lmfit.Model instead of CompositeModel.
+    """
+
+    fwhm_factor = 2 * np.sqrt(2 * np.log(2))
+    """float: Factor used to create :func:`lmfit.models.fwhm_expr`."""
+    flux_factor = np.sqrt(2 * np.pi)
+    """float: Factor used to create :func:`flux_expr`."""
+
+    def __init__(
+        self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs
+    ):  # noqa
+        kwargs.update(
+            {
+                "prefix": prefix,
+                "nan_policy": nan_policy,
+                "independent_vars": independent_vars,
+            }
+        )
+        super().__init__(gaussian1CH_d, **kwargs)
+        self._set_paramhints_prefix()
+
+    def _set_paramhints_prefix(self):
+        comp_pre = ["g1_"]
+        for comp in comp_pre:
+            self.set_param_hint(comp + "sigma", min=0)
+            self.set_param_hint(comp + "height", min=0)
+            self.set_param_hint(comp + "fwhm", expr=fwhm_expr_fast(self, comp))
+            self.set_param_hint(comp + "flux", expr=flux_expr_fast(self, comp))
+
+    def _reprstring(self, long=False):
+        return "constant + 1 gaussian (fast)"
+
+    guess = _guess_1gauss_d
+
+    __init__.__doc__ = lmfit.models.COMMON_INIT_DOC
 
 
 class Const_2GaussModel_fast(lmfit.Model):
