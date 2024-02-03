@@ -109,7 +109,9 @@ def run(s):  # noqa: C901
         fit_results_T[:] = np.array(results, dtype=object).reshape(fit_results_T.shape)
     else:
         for idx in iterate:
-            out = process_single_spectrum(subcube_av, snr_image, snr_threshold, models, s, idx)
+            out = process_single_spectrum(
+                subcube_av, snr_image, snr_threshold, models, s, idx
+            )
             fit_results_T[idx] = out
 
     s.model_results = fit_results
@@ -129,7 +131,9 @@ def run(s):  # noqa: C901
     keys_to_save = tc.fit.get_model_keys(models[-1], ignore=["fwhm"])
     # label_row = tc.fit.create_label_row_mc(keys_to_save)
     fit_info = ["success", "chisqr", "redchi"]
-    mc_label_row = tc.fit.extract_spaxel_info_mc(None, fit_info, keys_to_save, names_only=True)
+    mc_label_row = tc.fit.extract_spaxel_info_mc(
+        None, fit_info, keys_to_save, names_only=True
+    )
     # create output arrays:
     img_modelresults = np.empty(spatial_shape, dtype=object)
     img_mc_output = np.empty((len(mc_label_row),) + spatial_shape)
