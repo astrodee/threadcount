@@ -47,7 +47,7 @@ def run(s):  # noqa: C901
     # Determine the SNR for each spaxel.
     # This default way to get the snr image:
     snr_image = tc.fit.get_SNR_map(
-        subcube_av, signalAngstrom=[this_line.center - 9, this_line.center + 9]
+        subcube_av, signal_Angstrom=[this_line.center - 9, this_line.center + 9]
     )
 
     # Subtract the continuum:
