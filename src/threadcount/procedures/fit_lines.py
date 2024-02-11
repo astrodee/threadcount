@@ -104,6 +104,7 @@ def run(user_settings):
         "mc_n_iterations": 20,  # number of monte carlo fits for each spaxel.
         "parallel": False,  # whether invoke multiprocess (not available on windows)
         "n_process": 4,  # number of processes used in multiprocessing; activated when parallel is True
+        "chop_bandwidth": False,  # if fit fails, cut down the x axis by 5AA on each side and try again.
     }
 
     # test if cube has been opened. if not, open cube and deredshift.
