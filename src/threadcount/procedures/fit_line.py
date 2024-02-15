@@ -194,7 +194,7 @@ def process_single_spectrum(subcube_av, snr_image, snr_threshold, models, s, idx
         return [None]
 
     if f.success is False:
-        if s.chop_bandwith is False:
+        if s.chop_bandwidth is False:
             return [None]
         # One reason we saw for 1 gaussian fit to fail includes the iron line when
         # fitting 5007. Therefore, if there is a failure to fit 1 gaussian, I will
