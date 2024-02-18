@@ -105,6 +105,7 @@ def run(user_settings):
         "parallel": False,  # whether invoke multiprocess (not available on windows)
         "n_process": 4,  # number of processes used in multiprocessing; activated when parallel is True
         "chop_bandwidth": False,  # if fit fails, cut down the x axis by 5AA on each side and try again.
+        "SNR_HalfBW": 9,  # calculate the SNR in Line center +/- SNR_HalfBW
     }
 
     # test if cube has been opened. if not, open cube and deredshift.
