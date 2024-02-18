@@ -14,14 +14,22 @@ __all__ = [
     "Const_1GaussModel_fast",
     "Const_2GaussModel_fast",
     "Const_3GaussModel_fast",
+    "Const_4GaussModel_fast",
+    "Const_6GaussModel_fast",
     "gaussian1CH_d",
     "gaussian2CH_d",
     "gaussian3CH_d",
+    "gaussian4CH_d",
+    "gaussian6CH_d",
     "_guess_1gauss_d",
     "_guess_2gauss_d",
     "_guess_3gauss_d",
+    "_guess_4gauss_d",
+    "_guess_6gauss_d",
     "_guess_multiline2_d",
     "_guess_multiline3_d",
+    "_guess_multiline4_d",
+    "_guess_multiline6_d",
 ]
 
 
@@ -98,6 +106,96 @@ def gaussian3CH_d(
         + g3_height
         * np.exp(
             -((1.0 * x - g2_center - deltaxhi) ** 2) / max(tiny, (2 * g3_sigma**2))
+        )
+        + c
+    )
+    return f
+
+
+@njit
+def gaussian4CH_d(
+    x,
+    g1_height=1.0,
+    deltax1=0.0,
+    g1_sigma=1.0,
+    g2_height=1.0,
+    deltax2=0.0,
+    g2_sigma=1.0,
+    g3_height=1.0,
+    deltax3=0.0,
+    g3_sigma=1.0,
+    g4_height=1.0,
+    g4_center=0.0,
+    g4_sigma=1.0,
+    c=0.0,
+):
+    """Return a 4-Gaussian function in 1-dimension."""
+    f = (
+        g1_height
+        * np.exp(
+            -((1.0 * x - (g4_center + deltax1)) ** 2) / max(tiny, (2 * g1_sigma**2))
+        )
+        + g2_height
+        * np.exp(
+            -((1.0 * x - (g4_center + deltax2)) ** 2) / max(tiny, (2 * g2_sigma**2))
+        )
+        + g3_height
+        * np.exp(
+            -((1.0 * x - (g4_center + deltax3)) ** 2) / max(tiny, (2 * g3_sigma**2))
+        )
+        + g4_height
+        * np.exp(-((1.0 * x - g4_center) ** 2) / max(tiny, (2 * g4_sigma**2)))
+        + c
+    )
+    return f
+
+
+@njit
+def gaussian6CH_d(
+    x,
+    g1_height=1.0,
+    deltax1=0.0,
+    g1_sigma=1.0,
+    g2_height=1.0,
+    deltax2=0.0,
+    g2_sigma=1.0,
+    g3_height=1.0,
+    deltax3=0.0,
+    g3_sigma=1.0,
+    g4_height=1.0,
+    g4_center=0.0,
+    g4_sigma=1.0,
+    g5_height=1.0,
+    deltax5=0.0,
+    g5_sigma=1.0,
+    g6_height=1.0,
+    deltax6=0.0,
+    g6_sigma=1.0,
+    c=0.0,
+):
+    """Return a 6-Gaussian function in 1-dimension."""
+    f = (
+        g1_height
+        * np.exp(
+            -((1.0 * x - (g4_center + deltax1)) ** 2) / max(tiny, (2 * g1_sigma**2))
+        )
+        + g2_height
+        * np.exp(
+            -((1.0 * x - (g4_center + deltax2)) ** 2) / max(tiny, (2 * g2_sigma**2))
+        )
+        + g3_height
+        * np.exp(
+            -((1.0 * x - (g4_center + deltax3)) ** 2) / max(tiny, (2 * g3_sigma**2))
+        )
+        + g4_height
+        * np.exp(-((1.0 * x - g4_center) ** 2) / max(tiny, (2 * g4_sigma**2)))
+        + g5_height
+        * np.exp(
+            -((1.0 * x - (g4_center + deltax5)) ** 2) / max(tiny, (2 * g5_sigma**2))
+        )
+        + g6_height
+        * np.exp(
+            -((1.0 * x - (g4_center + deltax6)) ** 2) / max(tiny, (2 * g6_sigma**2))
         )
         + c
     )
@@ -197,6 +295,142 @@ def _guess_3gauss_d(
         g2_sigma=g2_sigma,
         g3_height=g3_height,
         g3_sigma=g3_sigma,
+        c=constant,
+    )
+
+    return lmfit.models.update_param_vals(pars, self.prefix, **kwargs)
+
+
+def _guess_4gauss_d(
+    self,
+    data,
+    x,
+    sigma0=None,
+    heights=(1, 1, 4, 4),
+    sigma_factors=(1, 1, 1, 1),
+    centers=(-2, -1, 1, 2),
+    absolute_centers=False,
+    **kwargs
+):
+    """Estimate initial model parameter values from data.
+    Used for fast model.
+    """
+    height, center, sigma = guess_from_peak(data, x)
+    constant = mean_edges(data, edge_fraction=0.1)
+
+    # fill in any missing function parameters based on 1gauss guess:
+    if sigma0 is None:
+        sigma0 = sigma
+
+    # calculate component guesses based off 1gauss guess and function parameters
+    g1_sigma, g2_sigma, g3_sigma, g4_sigma = sigma0 * np.array(sigma_factors)
+    if absolute_centers:
+        g1_center, g2_center, g3_center, g4_center = center + np.array(centers)
+    else:
+        g1_center, g2_center, g3_center, g4_center = center + sigma0 * np.array(centers)
+
+    deltax1 = g1_center - g4_center
+    deltax2 = g2_center - g4_center
+    deltax3 = g3_center - g4_center
+
+    a = sigma / (
+        heights[0] * g1_sigma
+        + heights[1] * g2_sigma
+        + heights[2] * g3_sigma
+        + heights[3] * g4_sigma
+    )
+    g1_height, g2_height, g3_height, g4_height = a * height * np.array(heights)
+
+    pars = self.make_params(
+        deltax1=deltax1,
+        deltax2=deltax2,
+        deltax3=deltax3,
+        g4_center=g4_center,
+        g1_height=g1_height,
+        g1_sigma=g1_sigma,
+        g2_height=g2_height,
+        g2_sigma=g2_sigma,
+        g3_height=g3_height,
+        g3_sigma=g3_sigma,
+        g4_height=g4_height,
+        g4_sigma=g4_sigma,
+        c=constant,
+    )
+
+    return lmfit.models.update_param_vals(pars, self.prefix, **kwargs)
+
+
+def _guess_6gauss_d(
+    self,
+    data,
+    x,
+    sigma0=None,
+    heights=(1, 1, 4, 4, 1, 1),
+    sigma_factors=(1, 1, 1, 1, 1, 1),
+    centers=(-2, -1, 1, 2, 5, 6),
+    absolute_centers=False,
+    **kwargs
+):
+    """Estimate initial model parameter values from data.
+    Used for fast model.
+    """
+    height, center, sigma = guess_from_peak(data, x)
+    constant = mean_edges(data, edge_fraction=0.1)
+
+    # fill in any missing function parameters based on 1gauss guess:
+    if sigma0 is None:
+        sigma0 = sigma
+
+    # calculate component guesses based off 1gauss guess and function parameters
+    g1_sigma, g2_sigma, g3_sigma, g4_sigma, g5_sigma, g6_sigma = sigma0 * np.array(
+        sigma_factors
+    )
+    if absolute_centers:
+        g1_center, g2_center, g3_center, g4_center, g5_center, g6_center = (
+            center + np.array(centers)
+        )
+    else:
+        g1_center, g2_center, g3_center, g4_center, g5_center, g6_center = (
+            center + sigma0 * np.array(centers)
+        )
+
+    deltax1 = g1_center - g4_center
+    deltax2 = g2_center - g4_center
+    deltax3 = g3_center - g4_center
+    deltax5 = g5_center - g4_center
+    deltax6 = g6_center - g4_center
+
+    a = sigma / (
+        heights[0] * g1_sigma
+        + heights[1] * g2_sigma
+        + heights[2] * g3_sigma
+        + heights[3] * g4_sigma
+        + heights[4] * g5_sigma
+        + heights[5] * g6_sigma
+    )
+    g1_height, g2_height, g3_height, g4_height, g5_height, g6_height = (
+        a * height * np.array(heights)
+    )
+
+    pars = self.make_params(
+        deltax1=deltax1,
+        deltax2=deltax2,
+        deltax3=deltax3,
+        g4_center=g4_center,
+        deltax5=deltax5,
+        deltax6=deltax6,
+        g1_height=g1_height,
+        g1_sigma=g1_sigma,
+        g2_height=g2_height,
+        g2_sigma=g2_sigma,
+        g3_height=g3_height,
+        g3_sigma=g3_sigma,
+        g4_height=g4_height,
+        g4_sigma=g4_sigma,
+        g5_height=g5_height,
+        g5_sigma=g5_sigma,
+        g6_height=g6_height,
+        g6_sigma=g6_sigma,
         c=constant,
     )
 
@@ -320,6 +554,86 @@ class Const_3GaussModel_fast(lmfit.Model):
     __init__.__doc__ = lmfit.models.COMMON_INIT_DOC
 
 
+class Const_4GaussModel_fast(lmfit.Model):
+    """A fast evaluation version of Const_4GaussModel.
+    It is created using lmfit.Model instead of CompositeModel.
+    """
+
+    fwhm_factor = 2 * np.sqrt(2 * np.log(2))
+    """float: Factor used to create :func:`lmfit.models.fwhm_expr`."""
+    flux_factor = np.sqrt(2 * np.pi)
+    """float: Factor used to create :func:`flux_expr`."""
+
+    def __init__(
+        self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs
+    ):  # noqa
+        kwargs.update(
+            {
+                "prefix": prefix,
+                "nan_policy": nan_policy,
+                "independent_vars": independent_vars,
+            }
+        )
+        super().__init__(gaussian4CH_d, **kwargs)
+        self._set_paramhints_prefix()
+
+    def _set_paramhints_prefix(self):
+        comp_pre = ["g1_", "g2_", "g3_", "g4_"]
+        for comp in comp_pre:
+            self.set_param_hint(comp + "sigma", min=0)
+            self.set_param_hint(comp + "height", min=0)
+            self.set_param_hint(comp + "fwhm", expr=fwhm_expr_fast(self, comp))
+            self.set_param_hint(comp + "flux", expr=flux_expr_fast(self, comp))
+        self.set_param_hint("g1_center", expr="g4_center+deltax1")
+        self.set_param_hint("g2_center", expr="g4_center+deltax2")
+        self.set_param_hint("g3_center", expr="g4_center+deltax3")
+
+    guess = _guess_4gauss_d
+
+    __init__.__doc__ = lmfit.models.COMMON_INIT_DOC
+
+
+class Const_6GaussModel_fast(lmfit.Model):
+    """A fast evaluation version of Const_6GaussModel.
+    It is created using lmfit.Model instead of CompositeModel.
+    """
+
+    fwhm_factor = 2 * np.sqrt(2 * np.log(2))
+    """float: Factor used to create :func:`lmfit.models.fwhm_expr`."""
+    flux_factor = np.sqrt(2 * np.pi)
+    """float: Factor used to create :func:`flux_expr`."""
+
+    def __init__(
+        self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs
+    ):  # noqa
+        kwargs.update(
+            {
+                "prefix": prefix,
+                "nan_policy": nan_policy,
+                "independent_vars": independent_vars,
+            }
+        )
+        super().__init__(gaussian6CH_d, **kwargs)
+        self._set_paramhints_prefix()
+
+    def _set_paramhints_prefix(self):
+        comp_pre = ["g1_", "g2_", "g3_", "g4_", "g5_", "g6_"]
+        for comp in comp_pre:
+            self.set_param_hint(comp + "sigma", min=0)
+            self.set_param_hint(comp + "height", min=0)
+            self.set_param_hint(comp + "fwhm", expr=fwhm_expr_fast(self, comp))
+            self.set_param_hint(comp + "flux", expr=flux_expr_fast(self, comp))
+        self.set_param_hint("g1_center", expr="g4_center+deltax1")
+        self.set_param_hint("g2_center", expr="g4_center+deltax2")
+        self.set_param_hint("g3_center", expr="g4_center+deltax3")
+        self.set_param_hint("g5_center", expr="g4_center+deltax5")
+        self.set_param_hint("g6_center", expr="g4_center+deltax6")
+
+    guess = _guess_6gauss_d
+
+    __init__.__doc__ = lmfit.models.COMMON_INIT_DOC
+
+
 def _guess_multiline2_d(
     self,
     data,
@@ -428,6 +742,144 @@ def _guess_multiline3_d(
         g3_height=g3_height,
         deltaxhi=deltaxhi,
         g3_sigma=g3_sigma,
+        c=constant,
+    )
+
+    return lmfit.models.update_param_vals(pars, self.prefix, **kwargs)
+
+
+def _guess_multiline4_d(
+    self,
+    data,
+    x,
+    sigma0=None,
+    heights=(1, 1, 4, 4),
+    sigma_factors=(1, 1, 1, 1),
+    centers=(-2, -1, 1, 2),
+    focus_lam=None,
+    absolute_centers=False,
+    **kwargs
+):
+    """Estimate initial model parameter values from data.
+    Used for fast models.
+    """
+    if focus_lam is None:
+        focus_lam = [np.min(x), np.max(x)]
+        focus_lam[0] = self.param_hints["g4_center"].get("min", focus_lam[0])
+        focus_lam[1] = self.param_hints["g4_center"].get("max", focus_lam[1])
+
+    focus_index = (x > focus_lam[0]) & (x < focus_lam[1])
+
+    height, center, sigma = guess_from_peak(data[focus_index], x[focus_index])
+    constant = mean_edges(data, edge_fraction=0.1)
+
+    # fill in any missing function parameters based on 1gauss guess:
+    if sigma0 is None:
+        sigma0 = sigma
+
+    # calculate component guesses based off 1gauss guess and function parameters
+    g1_sigma, g2_sigma, g3_sigma, g4_sigma = sigma0 * np.array(sigma_factors)
+    if absolute_centers:
+        g1_center, g2_center, g3_center, g4_center = center + np.array(centers)
+    else:
+        g1_center, g2_center, g3_center, g4_center = center + sigma0 * np.array(centers)
+
+    deltax1 = g1_center - g4_center
+    deltax2 = g2_center - g4_center
+    deltax3 = g3_center - g4_center
+
+    g1_height, g2_height, g3_height, g4_height = height * np.array(heights)
+
+    pars = self.make_params(
+        deltax1=deltax1,
+        deltax2=deltax2,
+        deltax3=deltax3,
+        g4_center=g4_center,
+        g1_height=g1_height,
+        g1_sigma=g1_sigma,
+        g2_height=g2_height,
+        g2_sigma=g2_sigma,
+        g3_height=g3_height,
+        g3_sigma=g3_sigma,
+        g4_height=g4_height,
+        g4_sigma=g4_sigma,
+        c=constant,
+    )
+
+    return lmfit.models.update_param_vals(pars, self.prefix, **kwargs)
+
+
+def _guess_multiline6_d(
+    self,
+    data,
+    x,
+    sigma0=None,
+    heights=(1, 1, 4, 4, 1, 1),
+    sigma_factors=(1, 1, 1, 1, 1, 1),
+    centers=(-2, -1, 1, 2, 5, 6),
+    focus_lam=None,
+    absolute_centers=False,
+    **kwargs
+):
+    """Estimate initial model parameter values from data.
+    Used for fast models.
+    """
+    if focus_lam is None:
+        focus_lam = [np.min(x), np.max(x)]
+        focus_lam[0] = self.param_hints["g4_center"].get("min", focus_lam[0])
+        focus_lam[1] = self.param_hints["g4_center"].get("max", focus_lam[1])
+
+    focus_index = (x > focus_lam[0]) & (x < focus_lam[1])
+
+    height, center, sigma = guess_from_peak(data[focus_index], x[focus_index])
+    constant = mean_edges(data, edge_fraction=0.1)
+
+    # fill in any missing function parameters based on 1gauss guess:
+    if sigma0 is None:
+        sigma0 = sigma
+
+    # calculate component guesses based off 1gauss guess and function parameters
+    g1_sigma, g2_sigma, g3_sigma, g4_sigma, g5_sigma, g6_sigma = sigma0 * np.array(
+        sigma_factors
+    )
+    if absolute_centers:
+        g1_center, g2_center, g3_center, g4_center, g5_center, g6_center = (
+            center + np.array(centers)
+        )
+    else:
+        g1_center, g2_center, g3_center, g4_center, g5_center, g6_center = (
+            center + sigma0 * np.array(centers)
+        )
+
+    deltax1 = g1_center - g4_center
+    deltax2 = g2_center - g4_center
+    deltax3 = g3_center - g4_center
+    deltax5 = g5_center - g4_center
+    deltax6 = g6_center - g4_center
+
+    g1_height, g2_height, g3_height, g4_height, g5_height, g6_height = (
+        height * np.array(heights)
+    )
+
+    pars = self.make_params(
+        deltax1=deltax1,
+        deltax2=deltax2,
+        deltax3=deltax3,
+        g4_center=g4_center,
+        deltax5=deltax5,
+        deltax6=deltax6,
+        g1_height=g1_height,
+        g1_sigma=g1_sigma,
+        g2_height=g2_height,
+        g2_sigma=g2_sigma,
+        g3_height=g3_height,
+        g3_sigma=g3_sigma,
+        g4_height=g4_height,
+        g4_sigma=g4_sigma,
+        g5_height=g5_height,
+        g5_sigma=g5_sigma,
+        g6_height=g6_height,
+        g6_sigma=g6_sigma,
         c=constant,
     )
 
