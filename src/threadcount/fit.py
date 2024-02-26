@@ -683,7 +683,7 @@ def get_SNR_map(cube, signal_idx=None, signal_Angstrom=None, nsigma=5, plot=Fals
             zorder=-3,
         )
         plt.legend()
-    baseline =  subcube.shape[0]*(subcube[0].data + subcube[1].data + subcube[-2].data + subcube[-1].data)/4
+    baseline =  subcube.shape[0]*(subcube[0].data + subcube[1].data + subcube[3].data)/3
     subcube_sum = subcube.sum(axis=0)
     result_image = subcube[0].clone()
     result_image.data = (subcube_sum.data  - baseline)/ np.sqrt(subcube_sum.var)
