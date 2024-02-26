@@ -1,4 +1,5 @@
 """main threadcount module."""
+
 import json
 import csv
 from types import SimpleNamespace
@@ -15,7 +16,7 @@ from . import models
 from . import mpdaf_ext  # noqa: F401
 
 
-FLAM16 = u.Unit(1e-16 * u.erg / (u.cm ** 2 * u.s * u.AA))
+FLAM16 = u.Unit(1e-16 * u.erg / (u.cm**2 * u.s * u.AA))
 """A header["BUNIT"] value we have."""
 
 FLOAT_FMT = ".8g"
@@ -26,7 +27,12 @@ DEFAULT_FIT_INFO = "aic_real bic_real chisqr redchi success".split()
 
 
 def open_fits_cube(
-    data_filename, data_hdu_index=None, var_filename=None, var_hdu_index=None, mask_if_over_n_nans=None, **kwargs
+    data_filename,
+    data_hdu_index=None,
+    var_filename=None,
+    var_hdu_index=None,
+    mask_if_over_n_nans=None,
+    **kwargs
 ):
     """Load a fits file using :class:`mpdaf.obj.Cube`, and handle variance in separate file.
 
@@ -80,7 +86,7 @@ def open_fits_cube(
         masksum = cube.mask.sum(axis=0)
         for iy, ix in np.ndindex(masksum.shape):
             if masksum[iy, ix] > mask_if_over_n_nans:
-                cube.mask[:,iy,ix] = True
+                cube.mask[:, iy, ix] = True
     # test for FLAM16:
     if cube.unit == u.dimensionless_unscaled:
         if cube.data_header.get("BUNIT") == "FLAM16":
@@ -204,7 +210,9 @@ def tweak_redshift(
     params = None
     print("Fitting selected spaxels with gaussian model...")
     for y, x in zip(*valid_pixels):
-        this_mr = subcube[:, y, x].lmfit(model, params=params, method="least_squares", nan_policy='omit')
+        this_mr = subcube[:, y, x].lmfit(
+            model, params=params, method="least_squares", nan_policy="omit"
+        )
         if params is None:
             params = this_mr.params
         results += [this_mr]
@@ -683,11 +691,11 @@ def get_SNR_map(cube, signal_idx=None, signal_Angstrom=None, nsigma=5, plot=Fals
             zorder=-3,
         )
         plt.legend()
-    #baseline =  subcube.shape[0]*np.nanmin(subcube.data, axis=0)
-    baseline = subcube.shape[0]*np.nanquantile(subcube.data, q=0.15, axis=0)
+    # baseline =  subcube.shape[0]*np.nanmin(subcube.data, axis=0)
+    baseline = subcube.shape[0] * np.nanquantile(subcube.data.data, q=0.15, axis=0)
     subcube_sum = subcube.sum(axis=0)
     result_image = subcube[0].clone()
-    result_image.data = (subcube_sum.data  - baseline)/ np.sqrt(subcube_sum.var)
+    result_image.data = (subcube_sum.data - baseline) / np.sqrt(subcube_sum.var)
     return result_image
 
 
@@ -1393,7 +1401,7 @@ def plot_ModelResults_pixel(  # noqa: C901
         comps = this_fit.eval_components()
         constant = comps.get("constant", 0)
         if len(comps) > 2:
-            for (k, v) in comps.items():
+            for k, v in comps.items():
                 try:
                     plt.plot(this_fit.userkws["x"], v + constant, label=k)
                 except ValueError:
@@ -2008,7 +2016,17 @@ def extract_spaxel_info_mc(
         return fit_info + param_names
     if mc_fits is None or len(mc_fits) == 0:
         return np.array(
-            np.broadcast_to(None, (len(fit_info) + 3 * len(model_params,))), dtype=float
+            np.broadcast_to(
+                None,
+                (
+                    len(fit_info)
+                    + 3
+                    * len(
+                        model_params,
+                    )
+                ),
+            ),
+            dtype=float,
         )
     #         return [None]*(len(fit_info)+3*len(model_params))
     dx = mc_fits[0].userkws["x"][1] - mc_fits[0].userkws["x"][0]
@@ -2412,7 +2430,7 @@ def remove_baseline(
     spatial_shape = subcube_av.shape[1:]
     subcube_wave_range = subcube_av.wave.get_range()
 
-    buffer_outside = 5.
+    buffer_outside = 5.0
     baseline_subcube = cube.select_lambda(
         this_baseline_range[0][0] - buffer_outside,
         this_baseline_range[1][1] + buffer_outside,
