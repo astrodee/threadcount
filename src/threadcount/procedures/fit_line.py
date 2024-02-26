@@ -52,6 +52,7 @@ def run(s):  # noqa: C901
             this_line.center - s.SNR_HalfBW,
             this_line.center + s.SNR_HalfBW,
         ],
+        baseline_q=s.SNR_Baseline_q,
     )
 
     # Subtract the continuum:

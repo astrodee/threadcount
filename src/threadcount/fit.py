@@ -604,7 +604,9 @@ def spatial_average(cube, kernel_image, **kwargs):
     return output
 
 
-def get_SNR_map(cube, signal_idx=None, signal_Angstrom=None, nsigma=5, plot=False):
+def get_SNR_map(
+    cube, signal_idx=None, signal_Angstrom=None, nsigma=5, plot=False, baseline_q=0.15
+):
     """Create Image of signal to noise ratio in a given bandwidth.
 
     This bandwidth may be selected in 3 different ways:
@@ -692,7 +694,9 @@ def get_SNR_map(cube, signal_idx=None, signal_Angstrom=None, nsigma=5, plot=Fals
         )
         plt.legend()
     # baseline =  subcube.shape[0]*np.nanmin(subcube.data, axis=0)
-    baseline = subcube.shape[0] * np.nanquantile(subcube.data.data, q=0.15, axis=0)
+    baseline = subcube.shape[0] * np.nanquantile(
+        subcube.data.data, q=baseline_q, axis=0
+    )
     subcube_sum = subcube.sum(axis=0)
     result_image = subcube[0].clone()
     result_image.data = (subcube_sum.data - baseline) / np.sqrt(subcube_sum.var)
