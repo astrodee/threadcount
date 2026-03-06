@@ -115,6 +115,7 @@ In `models/fast_models.py`:
 - Large blocks of commented-out functions in `fit.py` (`compile_spaxel_info_mc`, `create_label_row_mc`, etc.) — delete them. They are in version control history if needed.
 - `_guess_2gauss_old()` and `_guess_3gauss_old()` in `models/models.py` — delete or keep with an `_old` deprecation warning.
 - Incomplete `set_component_param_hints()` stub in models — either complete it or remove it.
+- Commented-out `__copy__` / `copy` methods in `lines.py` — delete them.
 
 ### 2.6 — Fix the seeded RNG in Monte Carlo
 In `lmfit_ext.py` `mc_iter`, `np.random.default_rng(42)` is re-created every call with the same seed. This means repeated calls produce **identical** noise draws, which defeats the purpose of Monte Carlo.
@@ -123,6 +124,18 @@ In `lmfit_ext.py` `mc_iter`, `np.random.default_rng(42)` is re-created every cal
 ### 2.7 — Fix global pixel-position state in `explore_results`
 In `procedures/explore_results.py`, `p` and `q` (current pixel position) are module-level globals mutated by callback functions. This is not thread-safe and makes testing impossible.
 - Wrap them in a small state object (a dataclass with two int fields) that is closed over by the callbacks.
+
+### 2.8 — Lazy `matplotlib` import in `lines.py`
+`import matplotlib.pyplot as plt` sits at the top of `lines.py`, so importing any wavelength constant (e.g. `from threadcount.lines import L_OIII5007`) silently drags matplotlib into the process. Move the import inside `Line.plot()` so it only loads when plotting is actually requested.
+
+### 2.9 — Make `Line.low` / `Line.high` live-computed properties
+`low` and `high` are computed once in `__init__` from `center`, `plus`, and `minus`. Mutating any of those attributes afterwards leaves `low`/`high` stale. Convert them to `@property` so they are always `center - minus` and `center + plus` respectively. The existing `self.low` / `self.high` assignments in `__init__` are simply removed.
+
+### 2.10 — Add `Line.__eq__`
+`Line` is a data-holding object, but two instances with identical parameters are not equal (`Line(5006.843) == Line(5006.843)` is `False`). Add `__eq__` comparing `__dict__` so equality works naturally in tests and user code.
+
+### 2.11 — Guard `Line(**kwargs)` against overwriting core attributes
+`Line.__init__` stores extra keyword arguments via `self.__dict__.update(**kwargs)`, which silently overwrites core attributes if a caller passes e.g. `center=9999`. Add a check that raises `TypeError` for any kwarg whose name collides with a core attribute (`center`, `plus`, `minus`, `low`, `high`, `label`, `save_str`).
 
 ---
 
@@ -162,6 +175,7 @@ Both `lmfit_ext.py` and `mpdaf_ext.py` call `extend_lmfit()` / equivalent at imp
 Move `FLAM16`, `FLOAT_FMT`, `DEFAULT_FIT_INFO` (from `fit.py`) and the physics wavelength deltas (from `models/fast_models.py`) into `threadcount/constants.py`.
 - Re-import them in the original locations with `from threadcount.constants import ...` so nothing breaks.
 - Now users can also `from threadcount.constants import FLAM16` if they need it.
+- While moving the scalar wavelength constants from `lines.py` (e.g. `OIII5007`, `Hb4861`, `Hgamma`), normalise their names to a consistent convention (e.g. all-caps `OIII_5007`, `H_BETA_4861`) to match the constants already named `FLAM16` etc.
 
 ### 3.5 — Deduplicate model `_guess` functions
 `models/models.py` has `_guess_1gauss`, `_guess_2gauss`, `_guess_3gauss` that share large blocks of identical setup logic. Extract the shared preamble into `_base_guess(spectrum)` returning `(peak, center, sigma, baseline)`. Each specific function then only handles its unique logic.
