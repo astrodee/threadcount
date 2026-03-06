@@ -129,7 +129,7 @@ def click_func(event, ax1, ax2, input_data, s, scube, nr_gauss, mc):
     # defines what happens when you click on a spaxel
     try:  # use try/except in case we are not using Qt backend
         zooming_panning = (
-            fig.canvas.cursor().shape() != 0
+            event.canvas.cursor().shape() != 0
         )  # 0 is the arrow, which means we are not zooming or panning.
     except:
         zooming_panning = False

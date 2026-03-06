@@ -299,7 +299,7 @@ def interactive_lower_threshold(image, title=""):
         # if input is convertable to float, redo loop, otherwise exit loop
         try:
             limit = float(new_limit)
-        except ValueError or TypeError:
+        except (ValueError, TypeError):
             plt.close()
             return limit
         m_img = image > limit

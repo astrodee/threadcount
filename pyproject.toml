@@ -81,6 +81,7 @@ ignore = [
     "E741",   # ambiguous variable name (l, O, I) — widespread in astronomy code
     # --- Rules to fix in later phases ---
     "UP031",  # printf-style % formatting → f-strings (Phase 2.3)
+    "UP038",  # isinstance(x, (A, B)) → isinstance(x, A | B) — needs Python 3.10+ (Phase 2)
     "B905",   # zip() without explicit strict= (needs case-by-case review)
     "F403",   # import * (needs audit before removal)
     "E711",   # comparison to None with == (Phase 2)
