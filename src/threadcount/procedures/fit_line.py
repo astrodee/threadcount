@@ -1,8 +1,10 @@
-import numpy as np
-import threadcount as tc
-from itertools import tee
 import multiprocessing as mp
 from functools import partial
+from itertools import tee
+
+import numpy as np
+
+import threadcount as tc
 
 mpException = None
 try:

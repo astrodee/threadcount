@@ -1,10 +1,11 @@
 import astropy.units as u
-from astropy import visualization as viz
 import matplotlib.pyplot as plt
 import numpy as np
+from astropy import visualization as viz
+from mpdaf.obj import Image
+
 import threadcount as tc
 from threadcount.procedures import set_rcParams
-from mpdaf.obj import Image
 
 
 def run(user_settings):

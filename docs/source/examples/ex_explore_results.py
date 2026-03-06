@@ -3,7 +3,6 @@ from threadcount.procedures import (  # noqa: F401
     explore_results,
 )
 
-
 # example file to run explore_results.py
 # It will display a figure with a map on the left where you can click on a pixel or move arround with keyboard arrows and it will
 # display an emission line with its corresponding fit from threadcount on the right figure

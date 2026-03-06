@@ -1,6 +1,7 @@
 """Functions to extend classes Model, ModelResult, Parameters from package lmfit."""
 
 from copy import copy
+
 import lmfit
 import numpy as np
 
@@ -99,8 +100,8 @@ def plot2(
     If `fig` is None then `matplotlib.pyplot.figure(**fig_kws)` is
     called, otherwise `fig_kws` is ignored.
     """
-    from matplotlib import pyplot as plt
     import matplotlib as mpl
+    from matplotlib import pyplot as plt
 
     if data_kws is None:
         data_kws = {}

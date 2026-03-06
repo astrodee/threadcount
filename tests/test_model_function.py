@@ -1,7 +1,8 @@
-import numpy as np
 import random
-import numba
+
 import lmfit
+import numba
+import numpy as np
 
 tiny = lmfit.models.tiny
 

@@ -2,8 +2,8 @@
 
 import threadcount as tc
 from threadcount.procedures import (  # noqa: F401
-    set_rcParams,
     analyze_outflow_extent,
+    set_rcParams,
 )
 
 set_rcParams.set_params()

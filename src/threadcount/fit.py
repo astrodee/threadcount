@@ -1,20 +1,22 @@
 """main threadcount module."""
 
-import json
 import csv
-from types import SimpleNamespace
+import json
 from collections import OrderedDict, UserList
-import numpy as np
+from types import SimpleNamespace
+
+import astropy.units as u
+import lmfit
 import matplotlib.pyplot as plt
+import mpdaf.obj
+import numpy as np
 from matplotlib.backends.backend_pdf import PdfPages
 
-import lmfit
-import mpdaf.obj
-import astropy.units as u
-from . import lines
-from . import models
-from . import mpdaf_ext  # noqa: F401
-
+from . import (
+    lines,
+    models,
+    mpdaf_ext,  # noqa: F401
+)
 
 FLAM16 = u.Unit(1e-16 * u.erg / (u.cm**2 * u.s * u.AA))
 """A header["BUNIT"] value we have."""

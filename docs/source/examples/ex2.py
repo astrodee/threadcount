@@ -2,9 +2,9 @@
 
 import threadcount as tc
 from threadcount.procedures import (
+    fit_lines,
     open_cube_and_deredshift,
     set_rcParams,
-    fit_lines,
 )
 
 load_settings = {

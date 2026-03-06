@@ -1,8 +1,9 @@
-import numpy as np
 import matplotlib
-import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.colors import LogNorm
+
 import threadcount as tc
 
 

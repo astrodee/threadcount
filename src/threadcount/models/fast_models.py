@@ -1,9 +1,8 @@
 """Custom Models that should function just like lmfit's models."""
 
-import numpy as np
-
-from numba import njit
 import lmfit
+import numpy as np
+from numba import njit
 
 from .basic import guess_from_peak, mean_edges, reapply_certain_model_hints
 from .models import _guess_1gauss
@@ -1122,7 +1121,7 @@ class Const_4GaussModel_constrained_SII_fast(lmfit.Model):
             self.set_param_hint(comp + "flux", expr=flux_expr_fast(self, comp))
         self.set_param_hint("g1_center", expr=f"g4_center+deltax12+{d24}")
         self.set_param_hint("g2_center", expr=f"g4_center+{d24}")
-        self.set_param_hint("g3_center", expr=f"g4_center+deltax34")
+        self.set_param_hint("g3_center", expr="g4_center+deltax34")
 
     guess = _guess_multiline4_constrained_d
 
@@ -1201,7 +1200,7 @@ class Const_6GaussModel_constrained_HaNII_fast(lmfit.Model):
             self.set_param_hint(comp + "flux", expr=flux_expr_fast(self, comp))
         self.set_param_hint("g1_center", expr=f"g4_center+deltax12+{d24}")
         self.set_param_hint("g2_center", expr=f"g4_center+{d24}")
-        self.set_param_hint("g3_center", expr=f"g4_center+deltax34")
+        self.set_param_hint("g3_center", expr="g4_center+deltax34")
         self.set_param_hint("g5_center", expr=f"g4_center+deltax56+{d64}")
         self.set_param_hint("g6_center", expr=f"g4_center+{d64}")
         self.set_param_hint("g1_height", expr="g2_height*g1_h_factor")

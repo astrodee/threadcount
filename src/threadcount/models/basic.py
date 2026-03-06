@@ -1,6 +1,5 @@
-import numpy as np
-
 import lmfit
+import numpy as np
 
 tiny = lmfit.models.tiny  # 1.0e-15
 

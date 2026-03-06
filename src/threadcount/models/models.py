@@ -1,9 +1,9 @@
 """Custom Models that should function just like lmfit's models."""
 
-import numpy as np
 import operator
 
 import lmfit
+import numpy as np
 
 from .basic import guess_from_peak, mean_edges, reapply_certain_model_hints
 

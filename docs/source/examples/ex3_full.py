@@ -1,12 +1,13 @@
 # examples/ex3.py
 
 import matplotlib.pyplot as plt
+
 import threadcount as tc
 from threadcount.procedures import (  # noqa: F401
+    analyze_outflow_extent,
+    fit_lines,
     open_cube_and_deredshift,
     set_rcParams,
-    fit_lines,
-    analyze_outflow_extent,
 )
 
 set_rcParams.set_params()
