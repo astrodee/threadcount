@@ -84,12 +84,13 @@ def mean_edges(y, x=None, edge_fraction=0.1):
     # return the mean of the edge points.
     return y_edges.mean()
 
+
 def reapply_certain_model_hints(model, params):
     for pname, par in model.param_hints.items():
         keys = par.keys()
-        if ('vary' in keys and par['vary'] is False and 'value' in keys):
-            params[pname].set(value = par['value'])
-        if ('expr' in keys):
-            params[pname].set(expr = par['expr'])
+        if "vary" in keys and par["vary"] is False and "value" in keys:
+            params[pname].set(value=par["value"])
+        if "expr" in keys:
+            params[pname].set(expr=par["expr"])
         params.update_constraints()
     return params

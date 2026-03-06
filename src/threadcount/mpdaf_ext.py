@@ -1,4 +1,5 @@
 """Functions to extend Spectrum, Image, and Cube from package mpdaf."""
+
 import mpdaf.obj.spectrum
 import mpdaf.obj.image
 import numpy as np

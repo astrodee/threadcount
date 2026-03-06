@@ -214,7 +214,6 @@ def plot_spec(ax2, input_data, scube, p, q, nr_gauss, mc, line, z_set):
         const = input_data["avg_c"][b, a]
         snr = input_data["snr"][b, a]
         for i in range(nr_gauss):
-
             sigma_i = input_data["avg_g%i_sigma" % (i + 1)][b, a]
             center_i = input_data["avg_g%i_center" % (i + 1)][b, a]
             height_i = input_data["avg_g%i_height" % (i + 1)][b, a]

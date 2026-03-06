@@ -21,10 +21,14 @@ def gaussian3CH_d(
 ):
     """Return a 3-Gaussian function in 1-dimension."""
     f = (
-        g1_height * np.exp(-((1.0 * x - g2_center - deltax) ** 2) / max(tiny, (2 * g1_sigma**2)))
-        + g2_height * np.exp(-((1.0 * x - g2_center) ** 2) / max(tiny, (2 * g2_sigma**2)))
+        g1_height
+        * np.exp(-((1.0 * x - g2_center - deltax) ** 2) / max(tiny, (2 * g1_sigma**2)))
+        + g2_height
+        * np.exp(-((1.0 * x - g2_center) ** 2) / max(tiny, (2 * g2_sigma**2)))
         + g3_height
-        * np.exp(-((1.0 * x - g2_center - deltaxhi) ** 2) / max(tiny, (2 * g3_sigma**2)))
+        * np.exp(
+            -((1.0 * x - g2_center - deltaxhi) ** 2) / max(tiny, (2 * g3_sigma**2))
+        )
         + c
     )
     return f

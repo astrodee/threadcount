@@ -1,4 +1,5 @@
 """Custom Models that should function just like lmfit's models."""
+
 import numpy as np
 import operator
 
@@ -52,7 +53,8 @@ def gaussian2CH(
     """Return a 2-Gaussian function in 1-dimension."""
     f = (
         g1_height * np.exp(-((1.0 * x - g1_center) ** 2) / max(tiny, (2 * g1_sigma**2)))
-        + g2_height * np.exp(-((1.0 * x - g2_center) ** 2) / max(tiny, (2 * g2_sigma**2)))
+        + g2_height
+        * np.exp(-((1.0 * x - g2_center) ** 2) / max(tiny, (2 * g2_sigma**2)))
         + c
     )
     return f
@@ -74,8 +76,10 @@ def gaussian3CH(
     """Return a 3-Gaussian function in 1-dimension."""
     f = (
         g1_height * np.exp(-((1.0 * x - g1_center) ** 2) / max(tiny, (2 * g1_sigma**2)))
-        + g2_height * np.exp(-((1.0 * x - g2_center) ** 2) / max(tiny, (2 * g2_sigma**2)))
-        + g3_height * np.exp(-((1.0 * x - g3_center) ** 2) / max(tiny, (2 * g3_sigma**2)))
+        + g2_height
+        * np.exp(-((1.0 * x - g2_center) ** 2) / max(tiny, (2 * g2_sigma**2)))
+        + g3_height
+        * np.exp(-((1.0 * x - g3_center) ** 2) / max(tiny, (2 * g3_sigma**2)))
         + c
     )
     return f
@@ -132,7 +136,7 @@ def _guess_2gauss(
     sigma_factors=(1, 1),
     centers=(-2, 0),
     absolute_centers=False,
-    **kwargs
+    **kwargs,
 ):
     """Estimate initial model parameter values from data.
 
@@ -218,13 +222,20 @@ def _guess_2gauss(
         g2_sigma=g2_sigma,
         c=constant,
     )
-    
+
     pars = reapply_certain_model_hints(self, pars)
     return lmfit.models.update_param_vals(pars, self.prefix, **kwargs)
 
 
 def _guess_2gauss_old(
-    self, data, x, g1_sigma=None, h2_factor=0.25, s2_factor=1, cen2_offset=None, **kwargs
+    self,
+    data,
+    x,
+    g1_sigma=None,
+    h2_factor=0.25,
+    s2_factor=1,
+    cen2_offset=None,
+    **kwargs,
 ):
     """Estimate initial model parameter values from data.
 
@@ -294,7 +305,7 @@ def _guess_3gauss(
     sigma_factors=(1, 1, 1),
     centers=(-1, 0, 1),
     absolute_centers=False,
-    **kwargs
+    **kwargs,
 ):
     """Estimate initial model parameter values from data.
 
@@ -378,7 +389,7 @@ def _guess_multiline3(
     centers=(-1, 0, 1),
     absolute_centers=False,
     focus_lam=None,
-    **kwargs
+    **kwargs,
 ):
     """Estimate initial model parameter values from data.
 
@@ -477,7 +488,7 @@ def _guess_multiline2(
     centers=(-1, 0),
     absolute_centers=False,
     focus_lam=None,
-    **kwargs
+    **kwargs,
 ):
     """Estimate initial model parameter values from data.
 
@@ -574,7 +585,7 @@ def _guess_3gauss_old(
     h3_factor=0.25,
     s3_factor=1,
     cen3_offset=None,
-    **kwargs
+    **kwargs,
 ):
     """Estimate initial model parameter values from data.
 
@@ -1058,7 +1069,9 @@ def set_common_limits(params, x, data):
         elif k.endswith("center"):
             param.set(min=x[limit], max=x[-limit])
         elif k == "c":
-            param.set(min=param.value - 2 * baseline_std, max=param.value + 2 * baseline_std)
+            param.set(
+                min=param.value - 2 * baseline_std, max=param.value + 2 * baseline_std
+            )
     return params
 
 

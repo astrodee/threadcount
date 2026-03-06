@@ -61,9 +61,9 @@ def run(user_settings):
     # where there is a manual region input to be masked:
     if s.mask_region_arguments is None or len(s.mask_region_arguments) > 0:
         temp_image = Image(data=sigma)
-        temp_image.mask[
-            :, :
-        ] = False  # to remove the masking of nans it does automatically.
+        temp_image.mask[:, :] = (
+            False  # to remove the masking of nans it does automatically.
+        )
 
         for kwargs in s.mask_region_arguments:
             temp_image.mask_region(**kwargs)
@@ -158,7 +158,7 @@ def run(user_settings):
         plt_image_extent(
             np.ma.masked_where(
                 (
-                    (im_to_plot < s.velocity_mask_limit)
+                    im_to_plot < s.velocity_mask_limit
                     # |(rel_err > 0.08)
                 ),
                 im_to_plot,
@@ -700,8 +700,7 @@ def create_outflow_mask(contour_output, contour_levels, which_contour, output_sh
 
 
 def row_max(flux_masked_array, clip=3, center_row=35):
-    """
-    """
+    """ """
     rowmax = np.argmax(flux_masked_array, axis=1)
     # we know that entries will be 0 for masked values.
     # eliminate those and calc. mean and std so we can eliminate outliers.

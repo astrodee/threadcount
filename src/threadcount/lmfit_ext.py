@@ -1,4 +1,5 @@
 """Functions to extend classes Model, ModelResult, Parameters from package lmfit."""
+
 from copy import copy
 import lmfit
 import numpy as np
@@ -119,7 +120,10 @@ def plot2(
         fig_kws_.update(fig_kws)
 
     if len(self.model.independent_vars) != 1:
-        print("Fit can only be plotted if the model function has one " "independent variable.")
+        print(
+            "Fit can only be plotted if the model function has one "
+            "independent variable."
+        )
         return False
 
     if not isinstance(fig, (plt.Figure, mpl.figure.SubFigure)):
@@ -305,7 +309,9 @@ def mc_iter(self, n_mc_iterations=0, distribution="normal"):
     else:
         raise NotImplementedError("distribution " + distribution + " not implemented.")
     # use the above definitions to calculate the monte carlo iterations.
-    mc_data = distribution_fcn(input1, input2, (n_mc_iterations, np.broadcast(input1, input2).size))
+    mc_data = distribution_fcn(
+        input1, input2, (n_mc_iterations, np.broadcast(input1, input2).size)
+    )
     mc_fits = [self]
     for mcd in mc_data:
         modelresult = copy(self)

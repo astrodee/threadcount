@@ -110,7 +110,6 @@ analyze_settings.update(
         ),
         # commented out "line" because it is set above.
         # "line": tc.lines.L_OIII5007,
-
         # https://mpdaf.readthedocs.io/en/latest/api/mpdaf.obj.Image.html#mpdaf.obj.Image.mask_region
         # each entry in the list is a dictionary, where they keys are the
         # parameters for the function mask_region() in mpdaf, and the values

@@ -1,4 +1,5 @@
 """Library of line wavelengths."""
+
 import matplotlib.pyplot as plt
 
 # These are the air wavelengths in A
@@ -31,7 +32,7 @@ class Line(object):
         """Create a Line instance, defining center, bandwidth, and plot/save strings.
 
         A Line contains the information used to define the window that threadcount
-        will use to fit the line, as well as the display and save information. 
+        will use to fit the line, as well as the display and save information.
         You may use one of the predefined lines, or define your own. See Examples below.
 
         Parameters

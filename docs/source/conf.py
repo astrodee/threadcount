@@ -90,7 +90,10 @@ intersphinx_mapping = {
     "astropy": ("https://docs.astropy.org/en/stable/", None),
     "h5py": ("https://docs.h5py.org/en/stable/", None),
     "lmfit": ("https://lmfit.github.io/lmfit-py/", None),
-    "ipython": ("https://ipython.readthedocs.io/en/stable/", None,),
+    "ipython": (
+        "https://ipython.readthedocs.io/en/stable/",
+        None,
+    ),
     "specutils": ("https://specutils.readthedocs.io/en/stable", None),
     "mpdaf": ("https://mpdaf.readthedocs.io/en/stable", None),
 }

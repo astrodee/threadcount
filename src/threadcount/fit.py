@@ -32,7 +32,7 @@ def open_fits_cube(
     var_filename=None,
     var_hdu_index=None,
     mask_if_over_n_nans=None,
-    **kwargs
+    **kwargs,
 ):
     """Load a fits file using :class:`mpdaf.obj.Cube`, and handle variance in separate file.
 

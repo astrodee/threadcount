@@ -953,9 +953,7 @@ class Const_1GaussModel_fast(lmfit.Model):
     flux_factor = np.sqrt(2 * np.pi)
     """float: Factor used to create :func:`flux_expr`."""
 
-    def __init__(
-        self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs
-    ):  # noqa
+    def __init__(self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs):  # noqa
         kwargs.update(
             {
                 "prefix": prefix,
@@ -992,9 +990,7 @@ class Const_2GaussModel_fast(lmfit.Model):
     flux_factor = np.sqrt(2 * np.pi)
     """float: Factor used to create :func:`flux_expr`."""
 
-    def __init__(
-        self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs
-    ):  # noqa
+    def __init__(self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs):  # noqa
         kwargs.update(
             {
                 "prefix": prefix,
@@ -1032,9 +1028,7 @@ class Const_3GaussModel_fast(lmfit.Model):
     flux_factor = np.sqrt(2 * np.pi)
     """float: Factor used to create :func:`flux_expr`."""
 
-    def __init__(
-        self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs
-    ):  # noqa
+    def __init__(self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs):  # noqa
         kwargs.update(
             {
                 "prefix": prefix,
@@ -1070,9 +1064,7 @@ class Const_4GaussModel_fast(lmfit.Model):
     flux_factor = np.sqrt(2 * np.pi)
     """float: Factor used to create :func:`flux_expr`."""
 
-    def __init__(
-        self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs
-    ):  # noqa
+    def __init__(self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs):  # noqa
         kwargs.update(
             {
                 "prefix": prefix,
@@ -1109,9 +1101,7 @@ class Const_4GaussModel_constrained_SII_fast(lmfit.Model):
     flux_factor = np.sqrt(2 * np.pi)
     """float: Factor used to create :func:`flux_expr`."""
 
-    def __init__(
-        self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs
-    ):  # noqa
+    def __init__(self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs):  # noqa
         kwargs.update(
             {
                 "prefix": prefix,
@@ -1149,9 +1139,7 @@ class Const_6GaussModel_fast(lmfit.Model):
     flux_factor = np.sqrt(2 * np.pi)
     """float: Factor used to create :func:`flux_expr`."""
 
-    def __init__(
-        self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs
-    ):  # noqa
+    def __init__(self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs):  # noqa
         kwargs.update(
             {
                 "prefix": prefix,
@@ -1190,9 +1178,7 @@ class Const_6GaussModel_constrained_HaNII_fast(lmfit.Model):
     flux_factor = np.sqrt(2 * np.pi)
     """float: Factor used to create :func:`flux_expr`."""
 
-    def __init__(
-        self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs
-    ):  # noqa
+    def __init__(self, independent_vars=["x"], prefix="", nan_policy="raise", **kwargs):  # noqa
         kwargs.update(
             {
                 "prefix": prefix,
