@@ -12,13 +12,13 @@
 
 *These tasks change no runtime behaviour and can be done immediately.*
 
-### 0a.1 — Add `ruff` and `pre-commit`
+### 0a.1 — Add `ruff` and `pre-commit` ✅
 - Add a `[tool.ruff]` section in `pyproject.toml` for linting and formatting. Start permissive (disable rules you can't fix yet) and tighten gradually.
 - Add a `.pre-commit-config.yaml` running `ruff --fix` and `ruff format` on every commit.
 - Add `dev` extras to `[project.optional-dependencies]` (`pytest`, `pytest-cov`, `mypy`, `ruff`, `pre-commit`) so contributors can do `pip install -e ".[dev]"`.
 - This stops the codebase from drifting further while you improve it.
 
-### 0a.2 — Add a minimal CI pipeline
+### 0a.2 — Add a minimal CI pipeline ✅
 - A GitHub Actions workflow (`.github/workflows/ci.yml`) that runs `pytest` and `ruff` on every push/PR.
 - Start with the current Python/numpy versions; expand after the dependency work below.
 
@@ -30,25 +30,25 @@
 
 *The existing test suite is a single 35-line file with one test. Build coverage to ~50% here — this is the safety net that makes the dependency changes in Phase 0b safe to attempt.*
 
-### 1.1 — Synthetic data fixtures
+### 1.1 — Synthetic data fixtures ✅
 Create `tests/conftest.py` with `pytest` fixtures that build:
 - A small synthetic FITS cube (e.g. 10×10 spatial, 200-wavelength) with known gaussian emission lines injected at known parameters.
 - A pre-built `SimpleNamespace` settings object with all defaults filled in.
 
 These become reusable inputs for every subsequent test.
 
-### 1.2 — Tests for settings processing
+### 1.2 — Tests for settings processing ✅
 Cover `fit.py` `process_settings` / `process_settings_dict`:
 - Defaults are applied when a key is absent.
 - User overrides replace defaults.
 - Invalid types raise a clear error (currently they silently produce wrong behaviour).
 
-### 1.3 — Tests for `Line` and `lines.py`
+### 1.3 — Tests for `Line` and `lines.py` ✅
 Cover `lines.py`:
 - Constructing a `Line` with explicit values stores them correctly.
 - Pre-defined constants (`L_OIII5007`, etc.) have the expected wavelength values.
 
-### 1.4 — Tests for model functions
+### 1.4 — Tests for model functions ✅
 Extend `tests/test_model_function.py`:
 - One test per model class (fast and standard): pass synthetic flux array, verify the fit recovers the injected gaussian parameters within tolerance.
 - Fix the existing `test_numba_accuracy` to use a seeded RNG for reproducibility.
@@ -88,10 +88,10 @@ Extend `tests/test_model_function.py`:
 
 This item adds the tests identified as missing in §1.4.  Source-code bug fixes belong in Phase 2 (see §2.14, §2.13, etc.); this item contains only new or improved tests.  Tests that depend on a Phase 2 source fix (e.g. absorption-line tests for `GaussianModelH`) are bundled with their Phase 2 item, not here.
 
-**A. Add parity tests for `Const_2GaussModel_fast` and `Const_3GaussModel_fast`**
+**A. Add parity tests for `Const_2GaussModel_fast` and `Const_3GaussModel_fast`** ✅
 - Extend the `TestConst2GaussModelFast` and `TestConst3GaussModelFast` classes with `test_parity_with_standard` methods matching the pattern already in `TestConst1GaussModelFast`.
 
-**B. Tighten 4G and 6G `test_fit_from_auto_guess` assertions**
+**B. Tighten 4G and 6G `test_fit_from_auto_guess` assertions** ✅
 - `TestConst4GaussModelFast.test_fit_from_auto_guess`: add assertions on `deltax1`, `deltax2`, `deltax3` and at least `g4_height`; tighten redchi threshold to `1e-3`.
 - `TestConst6GaussModelFast.test_fit_from_auto_guess`: add assertions on `deltax2`, `deltax3`, `deltax5`; tighten redchi threshold to `1e-3`.
 - `TestConst4GaussModelConstrainedSIIFast.test_fit_from_auto_guess`: add assertions on `g2_height`, `deltax12`; tighten redchi threshold to `1e-3`.

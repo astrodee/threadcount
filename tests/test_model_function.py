@@ -765,6 +765,84 @@ class TestConst2GaussModelFast:
         _assert_close(result.params["deltax"].value, DELTAX, "deltax")
         _assert_close(result.params["g2_center"].value, CEN2, "g2_center")
 
+    def test_parity_with_standard(self, xy):
+        """Fast and standard Const_2GaussModel must agree to 0.1 % on physical params.
+
+        The two models use different parameterisations (free centers vs deltax),
+        so we compare the physical quantities --- heights, centers, sigmas, c ---
+        by sorting both results by fitted sigma to avoid label-order ambiguity.
+        """
+        x, y = xy
+        m_std = tc_models.Const_2GaussModel()
+        m_fast = tc_models.Const_2GaussModel_fast()
+        # Standard model: start from near-truth initial params
+        pars_std = m_std.make_params(
+            g1_height=self.H_BROAD * 0.9,
+            g1_center=self.CEN,
+            g1_sigma=self.SIG_BROAD * 1.1,
+            g2_height=self.H_NARROW * 1.1,
+            g2_center=self.CEN,
+            g2_sigma=self.SIG_NARROW * 0.9,
+            c=self.C * 1.1,
+        )
+        r_std = m_std.fit(y, pars_std, x=x)
+        # Fast model: equivalent near-truth start
+        pars_fast = m_fast.make_params(
+            g1_height=self.H_BROAD * 0.9,
+            deltax=0.0,
+            g1_sigma=self.SIG_BROAD * 1.1,
+            g2_height=self.H_NARROW * 1.1,
+            g2_center=self.CEN,
+            g2_sigma=self.SIG_NARROW * 0.9,
+            c=self.C * 1.1,
+        )
+        r_fast = m_fast.fit(y, pars_fast, x=x)
+        assert r_std.redchi < 1e-4, (
+            f"Standard model did not converge: redchi={r_std.redchi:.3g}"
+        )
+        assert r_fast.redchi < 1e-4, (
+            f"Fast model did not converge: redchi={r_fast.redchi:.3g}"
+        )
+
+        # Sort both sets of components by sigma (narrow first) to align labels
+        def _components(r):
+            comps = sorted(
+                [
+                    (
+                        r.params[f"g{i}_sigma"].value,
+                        r.params[f"g{i}_height"].value,
+                        r.params[f"g{i}_center"].value,
+                    )
+                    for i in (1, 2)
+                ]
+            )
+            return comps
+
+        std_comps = _components(r_std)
+        fast_comps = _components(r_fast)
+        for (sig_s, h_s, cen_s), (sig_f, h_f, cen_f), label in zip(
+            std_comps, fast_comps, ("narrow", "broad")
+        ):
+            diff_sig = abs(sig_s - sig_f) / max(abs(sig_s), 1e-10)
+            diff_h = abs(h_s - h_f) / max(abs(h_s), 1e-10)
+            diff_cen = abs(cen_s - cen_f) / max(abs(cen_s), 1e-10)
+            assert diff_sig < 0.001, (
+                f"{label} sigma: std={sig_s:.6g}, fast={sig_f:.6g}, rel_diff={diff_sig:.2%}"
+            )
+            assert diff_h < 0.001, (
+                f"{label} height: std={h_s:.6g}, fast={h_f:.6g}, rel_diff={diff_h:.2%}"
+            )
+            assert diff_cen < 0.001, (
+                f"{label} center: std={cen_s:.6g}, fast={cen_f:.6g}, rel_diff={diff_cen:.2%}"
+            )
+        diff_c = abs(r_std.params["c"].value - r_fast.params["c"].value) / max(
+            abs(r_std.params["c"].value), 1e-10
+        )
+        assert diff_c < 0.001, (
+            f"c: std={r_std.params['c'].value:.6g}, fast={r_fast.params['c'].value:.6g}, "
+            f"rel_diff={diff_c:.2%}"
+        )
+
 
 # ===========================================================================
 # 6. Quadratic_1GaussModel
@@ -1496,6 +1574,88 @@ class TestConst3GaussModelFast:
             _assert_close(sf, se, f"{label} sigma")
         _assert_close(result.params["c"].value, C, "c")
 
+    def test_parity_with_standard(self, xy):
+        """Fast and standard Const_3GaussModel must agree to 0.1 % on physical params.
+
+        The two models use different parameterisations (free centers vs deltax/deltaxhi),
+        so we compare the physical quantities --- heights, centers, sigmas, c ---
+        by sorting both results by fitted center to avoid label-order ambiguity.
+        """
+        x, y = xy
+        m_std = tc_models.Const_3GaussModel()
+        m_fast = tc_models.Const_3GaussModel_fast()
+        DELTAX = -self.SIG
+        DELTAXHI = self.SIG
+        # Standard model: start from near-truth initial params
+        pars_std = m_std.make_params(
+            g1_height=self.H1 * 0.9,
+            g1_center=self.CEN + DELTAX,
+            g1_sigma=self.SIG * 1.1,
+            g2_height=self.H2 * 1.1,
+            g2_center=self.CEN,
+            g2_sigma=self.SIG * 0.9,
+            g3_height=self.H3 * 0.9,
+            g3_center=self.CEN + DELTAXHI,
+            g3_sigma=self.SIG * 1.1,
+            c=self.C * 1.1,
+        )
+        r_std = m_std.fit(y, pars_std, x=x, method="least_squares")
+        # Fast model: equivalent near-truth start
+        pars_fast = m_fast.make_params(
+            g1_height=self.H1 * 0.9,
+            deltax=DELTAX * 1.1,
+            g1_sigma=self.SIG * 1.1,
+            g2_height=self.H2 * 1.1,
+            g2_center=self.CEN,
+            g2_sigma=self.SIG * 0.9,
+            g3_height=self.H3 * 0.9,
+            deltaxhi=DELTAXHI * 1.1,
+            g3_sigma=self.SIG * 1.1,
+            c=self.C * 1.1,
+        )
+        r_fast = m_fast.fit(y, pars_fast, x=x)
+        assert r_std.redchi < 1e-4, (
+            f"Standard model did not converge: redchi={r_std.redchi:.3g}"
+        )
+        assert r_fast.redchi < 1e-4, (
+            f"Fast model did not converge: redchi={r_fast.redchi:.3g}"
+        )
+
+        # Sort both sets of components by center (low → mid → high) for label-agnostic comparison
+        def _components(r):
+            return sorted(
+                [
+                    (
+                        r.params[f"g{i}_center"].value,
+                        r.params[f"g{i}_height"].value,
+                        r.params[f"g{i}_sigma"].value,
+                    )
+                    for i in (1, 2, 3)
+                ]
+            )
+
+        std_comps = _components(r_std)
+        fast_comps = _components(r_fast)
+        for (cen_s, h_s, sig_s), (cen_f, h_f, sig_f), label in zip(
+            std_comps, fast_comps, ("low", "mid", "high")
+        ):
+            for qty, v_s, v_f in (
+                ("center", cen_s, cen_f),
+                ("height", h_s, h_f),
+                ("sigma", sig_s, sig_f),
+            ):
+                diff = abs(v_s - v_f) / max(abs(v_s), 1e-10)
+                assert diff < 0.001, (
+                    f"{label} {qty}: std={v_s:.6g}, fast={v_f:.6g}, rel_diff={diff:.2%}"
+                )
+        diff_c = abs(r_std.params["c"].value - r_fast.params["c"].value) / max(
+            abs(r_std.params["c"].value), 1e-10
+        )
+        assert diff_c < 0.001, (
+            f"c: std={r_std.params['c'].value:.6g}, fast={r_fast.params['c'].value:.6g}, "
+            f"rel_diff={diff_c:.2%}"
+        )
+
 
 # ===========================================================================
 # 11. Const_4GaussModel_fast
@@ -1621,9 +1781,10 @@ class TestConst4GaussModelFast:
     def test_fit_from_auto_guess(self):
         """Auto-guess convergence on data matching _guess_4gauss_d defaults.
 
-        Default centers=(-2, -1, +1, +2)*σ₀ and heights=(1, 1, 4, 4) relative to
-        the spectrum peak.  g4 is the rightmost reference component.  Distinct
-        heights break label degeneracy so key parameters can be verified after the fit.
+        Default centers=(-2, -1, +1, +2)*σ₀.  g4 is the rightmost reference
+        component.  Recovered centers and heights are sorted by wavelength before
+        comparison, so the test is insensitive to which component the optimizer
+        labels as g4.
         """
         SIG = 1.5
         CEN = 6563.0
@@ -1644,9 +1805,23 @@ class TestConst4GaussModelFast:
             + _gauss(x, H4, c4, SIG)
         )
         model = tc_models.Const_4GaussModel_fast()
-        result = model.fit(y, model.guess(y, x=x), x=x)
-        assert result.redchi < 1e-2, f"redchi={result.redchi:.3g}"
-        _assert_close(result.params["g4_center"].value, G4_CEN, "g4_center")
+        result = model.fit(y, model.guess(y, x=x), x=x, method="least_squares")
+        assert result.redchi < 1e-3, f"redchi={result.redchi:.3g}"
+        # Sort components by fitted absolute wavelength, then compare to truth.
+        p = result.params
+        g4c = p["g4_center"].value
+        fitted = sorted(
+            [
+                (g4c + p["deltax1"].value, p["g1_height"].value),
+                (g4c + p["deltax2"].value, p["g2_height"].value),
+                (g4c + p["deltax3"].value, p["g3_height"].value),
+                (g4c, p["g4_height"].value),
+            ]
+        )
+        truth = sorted([(c1, H1), (c2, H2), (c3, H3), (c4, H4)])
+        for (fc, fh), (tc, th) in zip(fitted, truth):
+            _assert_close(fc, tc, f"center@{tc:.1f}")
+            _assert_close(fh, th, f"height@{tc:.1f}")
         _assert_close(result.params["c"].value, C, "c")
 
 
@@ -1790,12 +1965,14 @@ class TestConst4GaussModelConstrainedSIIFast:
         x, y = xy
         model = tc_models.Const_4GaussModel_constrained_SII_fast()
         result = model.fit(y, model.guess(y, x=x), x=x, method="least_squares")
-        assert result.redchi < 1e-2, (
+        assert result.redchi < 1e-3, (
             f"Auto-guess fit did not converge: redchi={result.redchi:.3g}"
         )
         _assert_close(
             result.params["g4_center"].value, self.G4_CEN, "g4_center", rel_tol=0.10
         )
+        _assert_close(result.params["g2_height"].value, self.H2, "g2_height")
+        _assert_close(result.params["deltax12"].value, self.DELTAX12, "deltax12")
         _assert_close(result.params["c"].value, self.C, "c", rel_tol=0.10)
 
 
@@ -1947,22 +2124,22 @@ class TestConst6GaussModelFast:
                 assert np.isfinite(par.value), f"Non-finite guess for '{name}'"
 
     def test_fit_from_auto_guess(self):
-        """Auto-guess convergence on data matching _guess_6gauss_d defaults.
+        """Auto-guess convergence for all six component centers and heights.
 
-        Default centers=(-2, -1, +1, +2, +5, +6)*σ₀ and heights=(1, 1, 4, 4, 1, 1)
-        relative to the spectrum peak.  g4 is the reference at +2*σ₀.  Distinct
-        heights break label degeneracy so key parameters can be verified after the fit.
+        Bounds on g4_center and all deltax params prevent the optimizer from
+        sending components outside the data range, which would otherwise cause
+        label-permutation failures.  Recovered components are sorted by fitted
+        absolute wavelength before comparing to truth (insensitive to which
+        model label ends up at which physical component).
         """
-        SIG = 1.5
         CEN = 6563.0
-        # _guess_6gauss_d places g4 at CEN + 2*SIG (the +2 default center)
-        G4_CEN = CEN + 2 * SIG  # 6566
-        c1 = CEN - 2 * SIG  # 6560
+        SIG = 1.5
+        G4_CEN = CEN + 2 * SIG  # 6566.0
+        c1 = CEN - 2 * SIG  # 6560.0
         c2 = CEN - SIG  # 6561.5
         c3 = CEN + SIG  # 6564.5
-        c4 = G4_CEN  # 6566
         c5 = CEN + 5 * SIG  # 6570.5
-        c6 = CEN + 6 * SIG  # 6572
+        c6 = CEN + 6 * SIG  # 6572.0
         H1, H2, H3, H4, H5, H6 = 2.0, 3.0, 8.0, 10.0, 3.0, 2.0
         C = 1.0
         x = np.linspace(6540.0, 6595.0, 200)
@@ -1971,15 +2148,35 @@ class TestConst6GaussModelFast:
             + _gauss(x, H1, c1, SIG)
             + _gauss(x, H2, c2, SIG)
             + _gauss(x, H3, c3, SIG)
-            + _gauss(x, H4, c4, SIG)
+            + _gauss(x, H4, G4_CEN, SIG)
             + _gauss(x, H5, c5, SIG)
             + _gauss(x, H6, c6, SIG)
         )
         model = tc_models.Const_6GaussModel_fast()
-        result = model.fit(y, model.guess(y, x=x), x=x)
-        assert result.redchi < 1e-2, f"redchi={result.redchi:.3g}"
-        _assert_close(result.params["g4_center"].value, G4_CEN, "g4_center")
-        _assert_close(result.params["c"].value, C, "c")
+        pars = model.guess(y, x=x)
+        xspan = x[-1] - x[0]
+        pars["g4_center"].set(min=x[0], max=x[-1])
+        for _dx in ("deltax1", "deltax2", "deltax3", "deltax5", "deltax6"):
+            pars[_dx].set(min=-xspan, max=xspan)
+        result = model.fit(y, pars, x=x, method="least_squares")
+        assert result.redchi < 1e-3, f"redchi={result.redchi:.3g}"
+        p = result.params
+        g4c = p["g4_center"].value
+        fitted = sorted(
+            [
+                (g4c + p["deltax1"].value, p["g1_height"].value),
+                (g4c + p["deltax2"].value, p["g2_height"].value),
+                (g4c + p["deltax3"].value, p["g3_height"].value),
+                (g4c, p["g4_height"].value),
+                (g4c + p["deltax5"].value, p["g5_height"].value),
+                (g4c + p["deltax6"].value, p["g6_height"].value),
+            ]
+        )
+        truth = sorted([(c1, H1), (c2, H2), (c3, H3), (G4_CEN, H4), (c5, H5), (c6, H6)])
+        for (fc, fh), (tc, th) in zip(fitted, truth):
+            _assert_close(fc, tc, f"center@{tc:.1f}")
+            _assert_close(fh, th, f"height@{tc:.1f}")
+        _assert_close(p["c"].value, C, "c")
 
 
 # ===========================================================================
@@ -2155,13 +2352,15 @@ class TestConst6GaussModelConstrainedHaNIIFast:
         """
         x, y = xy
         model = tc_models.Const_6GaussModel_constrained_HaNII_fast()
-        result = model.fit(y, model.guess(y, x=x), x=x)
-        assert result.redchi < 1e-2, (
+        result = model.fit(y, model.guess(y, x=x), x=x, method="least_squares")
+        assert result.redchi < 1e-3, (
             f"Auto-guess fit did not converge: redchi={result.redchi:.3g}"
         )
         _assert_close(
             result.params["g4_center"].value, self.G4_CEN, "g4_center", rel_tol=0.10
         )
+        _assert_close(result.params["g2_height"].value, self.G2_HEIGHT, "g2_height")
+        _assert_close(result.params["g6_height"].value, self.G6_HEIGHT, "g6_height")
 
 
 # ===========================================================================
