@@ -228,6 +228,30 @@ All composite model classes (`Const_1GaussModel`, `Const_2GaussModel`, `Const_3G
 - Add a cross-reference to `_guess_multiline2` / `_guess_multiline2_d` as the correct choice for spatially-offset doublets.
 - Consider adding a `separate_lines=False` flag that routes to the multiline variant automatically.
 
+### 2.16 — Fix `set_param_hint_endswith` silently overwriting stricter user bounds
+`lmfit_ext.set_param_hints_endswith` calls `model.set_param_hint(name, **kwargs)` unconditionally for every matching parameter. When `fit_line.py` uses it to apply the instrument-dispersion floor (`min=instrument_dispersion_rest`) it overwrites any tighter `min` or looser `max` the user already set on a specific parameter — e.g. a custom model with `g2_sigma min=2` would silently have that minimum replaced by `~0.77`.
+
+**Workaround** (in user scripts): add the following monkey-patch at the top of the script, before importing threadcount procedures:
+```python
+import lmfit
+
+def _set_param_hints_endswith_conservative(self, name, **kwargs):
+    for this_name in self.param_names:
+        if this_name.endswith(name):
+            merged = dict(kwargs)
+            existing = self.param_hints.get(this_name, {})
+            if "min" in merged and "min" in existing:
+                merged["min"] = max(merged["min"], existing["min"])
+            if "max" in merged and "max" in existing:
+                merged["max"] = min(merged["max"], existing["max"])
+            self.set_param_hint(this_name, **merged)
+
+lmfit.Model.set_param_hint_endswith = _set_param_hints_endswith_conservative
+```
+
+**Fix**: replace the body of `set_param_hints_endswith` in `lmfit_ext.py` with the same logic above — when a parameter already has a hint, take `max(existing_min, new_min)` and `min(existing_max, new_max)` before calling `set_param_hint`. Parameters with no prior hint are unaffected.
+- Add a test to `test_model_function.py` (or a new `test_lmfit_ext.py`): set `g2_sigma min=2` on a `Const_2GaussModel_fast`, call `set_param_hint_endswith("sigma", min=0.77)`, and assert `g2_sigma min` is still `2`.
+
 ---
 
 ## Phase 3 — Structural Refactoring (requires Phase 1 safety net)
