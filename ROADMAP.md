@@ -115,10 +115,10 @@ This item adds the tests identified as missing in §1.4.  Source-code bug fixes 
 - Add a `TestGuessMultiline3` class similarly.
 - For the fast variants add `TestGuessMultiline2D`, `TestGuessMultiline3D`, `TestGuessMultiline4D`, `TestGuessMultiline6D` in the same style.
 
-**G. Add `GaussianModelH` prefix test**
+**G. Add `GaussianModelH` prefix test** ✅
 - Add `test_prefix_propagation` to `TestGaussianModelH`: construct `GaussianModelH(prefix="ha_")` and verify that all parameter names are prefixed and `eval` returns the same values as the un-prefixed model.
 
-**H. Extend `set_common_limits` tests to multi-component models**
+**H. Extend `set_common_limits` tests to multi-component models** ✅
 - Add `TestSetCommonLimits` fixture variants for `Const_2GaussModel` and `Const_3GaussModel`, verifying that all `g{n}_height`, `g{n}_sigma`, and `g{n}_center` parameters receive appropriate bounds.
 
 ---

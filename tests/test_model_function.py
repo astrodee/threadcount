@@ -258,6 +258,71 @@ class TestGaussianModelH:
             f"got {pars['height'].value}"
         )
 
+    def test_prefix_propagation(self):
+        """GaussianModelH(prefix='ha_') should prefix all parameter names.
+
+        Unlike the composite model classes (Const_1GaussModel, etc.) that silently
+        drop the prefix argument (see ROADMAP §2.13), GaussianModelH inherits
+        directly from lmfit.Model and must propagate the prefix correctly.
+
+        Notes
+        -----
+        ``model.param_names`` only contains the function-signature parameters
+        (height, center, sigma).  The constrained expressions fwhm and flux are
+        added via ``set_param_hint`` and therefore appear only in the
+        ``make_params()`` output, not in ``param_names`` directly.
+        """
+        prefix = "ha_"
+        model_prefixed = tc_models.GaussianModelH(prefix=prefix)
+        model_plain = tc_models.GaussianModelH()
+
+        # Function-signature params in param_names must all carry the prefix
+        core_names = {"height", "center", "sigma"}
+        for name in core_names:
+            assert f"{prefix}{name}" in model_prefixed.param_names, (
+                f"'{prefix}{name}' not found in param_names: {model_prefixed.param_names}"
+            )
+            assert name not in model_prefixed.param_names, (
+                f"Un-prefixed '{name}' found in prefixed model's param_names"
+            )
+
+        # make_params() must include the constrained fwhm and flux under prefixed names
+        x = np.linspace(6545.0, 6585.0, 120)
+        pars_prefixed = model_prefixed.make_params(
+            **{
+                f"{prefix}height": self.H,
+                f"{prefix}center": self.CEN,
+                f"{prefix}sigma": self.SIG,
+            }
+        )
+        for name in ("height", "center", "sigma", "fwhm", "flux"):
+            assert f"{prefix}{name}" in pars_prefixed, (
+                f"'{prefix}{name}' missing from make_params() output"
+            )
+            assert name not in pars_prefixed, (
+                f"Un-prefixed '{name}' found in make_params() output of prefixed model"
+            )
+
+        # fwhm and flux expressions must reference the prefixed sigma/height
+        assert f"{prefix}sigma" in pars_prefixed[f"{prefix}fwhm"].expr, (
+            f"fwhm expr '{pars_prefixed[f'{prefix}fwhm'].expr}' does not reference {prefix}sigma"
+        )
+        assert f"{prefix}height" in pars_prefixed[f"{prefix}flux"].expr, (
+            f"flux expr '{pars_prefixed[f'{prefix}flux'].expr}' does not reference {prefix}height"
+        )
+
+        # eval() must produce the same values as the un-prefixed model for
+        # identical physical parameters
+        pars_plain = model_plain.make_params(
+            height=self.H, center=self.CEN, sigma=self.SIG
+        )
+        np.testing.assert_allclose(
+            model_prefixed.eval(pars_prefixed, x=x),
+            model_plain.eval(pars_plain, x=x),
+            rtol=1e-12,
+            err_msg="Prefixed and un-prefixed GaussianModelH must evaluate identically",
+        )
+
 
 # ===========================================================================
 # 2. Const_1GaussModel
@@ -3099,6 +3164,63 @@ class TestSetCommonLimits:
             )
         finally:
             tc_models_module.min_sigma = original_min_sigma  # always restore
+
+    @pytest.mark.parametrize(
+        "model_cls, n_gauss, heights, center_offsets, sigmas",
+        [
+            (
+                tc_models.Const_2GaussModel,
+                2,
+                [20.0, 6.0],
+                [0.0, 0.0],  # narrow + broad, same centre (designed use-case)
+                [1.2, 4.0],
+            ),
+            (
+                tc_models.Const_3GaussModel,
+                3,
+                [3.0, 12.0, 3.0],
+                [-1.5, 0.0, 1.5],  # (CEN-SIG, CEN, CEN+SIG) — _guess_3gauss scenario
+                [1.5, 1.5, 1.5],
+            ),
+        ],
+        ids=["Const_2GaussModel", "Const_3GaussModel"],
+    )
+    def test_all_gaussian_params_bounded_multi_component(
+        self, model_cls, n_gauss, heights, center_offsets, sigmas
+    ):
+        """All g{n}_height, g{n}_sigma, and g{n}_center params on 2G and 3G models
+        receive appropriate bounds from set_common_limits.
+
+        Verifies the property that set_common_limits is not limited to 1-component
+        models — it iterates over all parameters by suffix, so every component in a
+        multi-Gaussian model should be bounded consistently.
+        """
+        CEN, C = 6563.0, 1.5
+        x = np.linspace(6535.0, 6595.0, 200)
+        y = C + sum(
+            _gauss(x, h, CEN + dc, s)
+            for h, dc, s in zip(heights, center_offsets, sigmas)
+        )
+        model = model_cls()
+        pars = model.guess(y, x=x)
+        pars = set_common_limits(pars, x, y)
+
+        for n in range(1, n_gauss + 1):
+            assert pars[f"g{n}_height"].min >= 0.0, (
+                f"g{n}_height.min should be >= 0, got {pars[f'g{n}_height'].min}"
+            )
+            assert pars[f"g{n}_sigma"].min >= 0.0, (
+                f"g{n}_sigma.min should be >= 0, got {pars[f'g{n}_sigma'].min}"
+            )
+            assert pars[f"g{n}_center"].min > x[0], (
+                f"g{n}_center.min={pars[f'g{n}_center'].min:.3f} should be > x[0]={x[0]:.3f}"
+            )
+            assert pars[f"g{n}_center"].max < x[-1], (
+                f"g{n}_center.max={pars[f'g{n}_center'].max:.3f} should be < x[-1]={x[-1]:.3f}"
+            )
+
+        assert np.isfinite(pars["c"].min), "c.min should be finite"
+        assert np.isfinite(pars["c"].max), "c.max should be finite"
 
 
 # ===========================================================================
