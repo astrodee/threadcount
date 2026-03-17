@@ -17,6 +17,12 @@ Covers:
   - TestConst6GaussModelFast
   - TestConst6GaussModelConstrainedHaNIIFast
   - TestLog10DoubleExponentialModel
+  - TestGuessMultiline2
+  - TestGuessMultiline3
+  - TestGuessMultiline2D
+  - TestGuessMultiline3D
+  - TestGuessMultiline4D
+  - TestGuessMultiline6D
 """
 
 import lmfit
@@ -30,6 +36,10 @@ from threadcount.models.basic import (
     reapply_certain_model_hints,
 )
 from threadcount.models.fast_models import (
+    _guess_multiline2_d,
+    _guess_multiline3_d,
+    _guess_multiline4_d,
+    _guess_multiline6_d,
     gaussian1CH_d,
     gaussian2CH_d,
     gaussian3CH_d,
@@ -38,6 +48,8 @@ from threadcount.models.fast_models import (
     gaussian6CH_constrained_HaNII_d_DELTAX64,
 )
 from threadcount.models.models import (
+    _guess_multiline2,
+    _guess_multiline3,
     gaussian2CH,
     gaussian3CH,
     gaussianH,
@@ -3126,3 +3138,433 @@ def test_njit_functions_are_compiled():
         assert isinstance(fn, CPUDispatcher), (
             f"{fn.__name__} is not a numba CPUDispatcher — @njit is not active"
         )
+
+
+# ===========================================================================
+# 23. Direct tests for _guess_multiline2 / _guess_multiline3  (standard models)
+#     and _guess_multiline{2,3,4,6}_d (fast models) — roadmap §1.4a-F
+#
+# Pattern (from eso120_10x10_thread_runner_fast_nelder_sii.py):
+#   model.guess = lambda data, x: _guess_multiline2_d(
+#       self=model, data=data, x=x, sigma0=1.2,
+#       centers=(-14.36, 0), absolute_centers=True, ...)
+# Each class patches the bound method, runs model.guess(), then checks:
+#   1. all free parameters are finite
+#   2. center offsets match the documented formula
+# ===========================================================================
+
+# Single-peak spectrum shared by all six guess-function test classes.
+_GUESS_X = np.linspace(6540.0, 6590.0, 200)
+_GUESS_Y = _make_1g(_GUESS_X, 10.0, 6563.0, 1.5, c=1.0)
+
+
+class TestGuessMultiline2:
+    """Direct tests for _guess_multiline2 (standard 2-component guess helper).
+
+    g2 is the reference component; g1 is placed relative to g2 by ``centers[0]``.
+    Usage pattern: ``model.guess = lambda data, x: _guess_multiline2(self=model, ...)``.
+    """
+
+    def test_params_are_finite(self):
+        """Patched model.guess() returns finite values for all free parameters."""
+        model = tc_models.Const_2GaussModel()
+        model.guess = lambda data, x: _guess_multiline2(
+            self=model, data=data, x=x, sigma0=1.2, heights=(1, 4), centers=(-2, 0)
+        )
+        pars = model.guess(_GUESS_Y, _GUESS_X)
+        for name, par in pars.items():
+            if par.expr is None and par.vary:
+                assert np.isfinite(par.value), f"Non-finite guess for '{name}'"
+
+    def test_center_offsets_relative(self):
+        """g1_center - g2_center = sigma0*(centers[0]-centers[1]) with absolute_centers=False."""
+        model = tc_models.Const_2GaussModel()
+        S0, C0, C1 = 1.2, -3.0, 1.0
+        model.guess = lambda data, x: _guess_multiline2(
+            self=model,
+            data=data,
+            x=x,
+            sigma0=S0,
+            centers=(C0, C1),
+            absolute_centers=False,
+        )
+        pars = model.guess(_GUESS_Y, _GUESS_X)
+        expected = S0 * (C0 - C1)
+        actual = pars["g1_center"].value - pars["g2_center"].value
+        assert abs(actual - expected) < 1e-10, (
+            f"g1-g2 center offset={actual:.8g}, expected={expected:.8g}"
+        )
+
+    def test_center_offsets_absolute(self):
+        """g1_center - g2_center = centers[0]-centers[1] with absolute_centers=True.
+
+        This is the SII usage pattern: centers=(-14.36, 0), absolute_centers=True
+        places g1 exactly 14.36 Å blueward of g2 regardless of sigma0.
+        """
+        model = tc_models.Const_2GaussModel()
+        OFF0, OFF1 = -14.36, 0.0
+        model.guess = lambda data, x: _guess_multiline2(
+            self=model,
+            data=data,
+            x=x,
+            centers=(OFF0, OFF1),
+            absolute_centers=True,
+        )
+        pars = model.guess(_GUESS_Y, _GUESS_X)
+        expected = OFF0 - OFF1
+        actual = pars["g1_center"].value - pars["g2_center"].value
+        assert abs(actual - expected) < 1e-10, (
+            f"g1-g2 center offset={actual:.8g}, expected={expected:.8g}"
+        )
+
+    def test_height_ratio_matches_input(self):
+        """g1_height / g2_height = heights[0] / heights[1]."""
+        model = tc_models.Const_2GaussModel()
+        H0, H1 = 1.0, 4.0
+        model.guess = lambda data, x: _guess_multiline2(
+            self=model, data=data, x=x, heights=(H0, H1)
+        )
+        pars = model.guess(_GUESS_Y, _GUESS_X)
+        actual_ratio = pars["g1_height"].value / pars["g2_height"].value
+        assert abs(actual_ratio - H0 / H1) < 1e-10, (
+            f"height ratio={actual_ratio:.6g}, expected={H0 / H1:.6g}"
+        )
+
+
+class TestGuessMultiline3:
+    """Direct tests for _guess_multiline3 (standard 3-component guess helper).
+
+    g2 is the reference; g1 and g3 are placed relative to g2 by centers[0] and
+    centers[2] respectively.  Usage pattern mirrors TestGuessMultiline2.
+    """
+
+    def test_params_are_finite(self):
+        """Patched model.guess() returns finite values for all free parameters."""
+        model = tc_models.Const_3GaussModel()
+        model.guess = lambda data, x: _guess_multiline3(
+            self=model, data=data, x=x, sigma0=1.2
+        )
+        pars = model.guess(_GUESS_Y, _GUESS_X)
+        for name, par in pars.items():
+            if par.expr is None and par.vary:
+                assert np.isfinite(par.value), f"Non-finite guess for '{name}'"
+
+    def test_center_offsets_relative(self):
+        """g{1,2,3}_center - g2_center = sigma0*(centers[i]-centers[1]) with absolute_centers=False."""
+        model = tc_models.Const_3GaussModel()
+        S0, CENTS = 1.2, (-3.0, 0.0, 2.5)
+        model.guess = lambda data, x: _guess_multiline3(
+            self=model,
+            data=data,
+            x=x,
+            sigma0=S0,
+            centers=CENTS,
+            absolute_centers=False,
+        )
+        pars = model.guess(_GUESS_Y, _GUESS_X)
+        for i, key in enumerate(("g1_center", "g2_center", "g3_center")):
+            expected_rel = S0 * (CENTS[i] - CENTS[1])
+            actual_rel = pars[key].value - pars["g2_center"].value
+            assert abs(actual_rel - expected_rel) < 1e-10, (
+                f"{key} relative offset={actual_rel:.8g}, expected={expected_rel:.8g}"
+            )
+
+    def test_center_offsets_absolute(self):
+        """g{1,2,3}_center - g2_center = centers[i]-centers[1] with absolute_centers=True."""
+        model = tc_models.Const_3GaussModel()
+        OFFS = (-14.0, 0.0, 21.0)
+        model.guess = lambda data, x: _guess_multiline3(
+            self=model,
+            data=data,
+            x=x,
+            centers=OFFS,
+            absolute_centers=True,
+        )
+        pars = model.guess(_GUESS_Y, _GUESS_X)
+        for i, key in enumerate(("g1_center", "g2_center", "g3_center")):
+            expected_rel = OFFS[i] - OFFS[1]
+            actual_rel = pars[key].value - pars["g2_center"].value
+            assert abs(actual_rel - expected_rel) < 1e-10, (
+                f"{key} relative offset={actual_rel:.8g}, expected={expected_rel:.8g}"
+            )
+
+    def test_height_ratios_match_input(self):
+        """g{1,2,3}_height / g2_height = heights[i] / heights[1]."""
+        model = tc_models.Const_3GaussModel()
+        H_RATIO = (1.0, 4.0, 2.0)
+        model.guess = lambda data, x: _guess_multiline3(
+            self=model, data=data, x=x, heights=H_RATIO
+        )
+        pars = model.guess(_GUESS_Y, _GUESS_X)
+        for i, key in enumerate(("g1_height", "g2_height", "g3_height")):
+            actual_ratio = pars[key].value / pars["g2_height"].value
+            expected_ratio = H_RATIO[i] / H_RATIO[1]
+            assert abs(actual_ratio - expected_ratio) < 1e-10, (
+                f"{key} / g2_height={actual_ratio:.6g}, expected={expected_ratio:.6g}"
+            )
+
+
+class TestGuessMultiline2D:
+    """Direct tests for _guess_multiline2_d (fast 2-component guess helper).
+
+    The key output parameter is ``deltax = g1_center - g2_center``.
+    Usage pattern (from eso120_10x10_thread_runner_fast_nelder_sii.py)::
+
+        model.guess = lambda data, x: _guess_multiline2_d(
+            self=model, data=data, x=x,
+            sigma0=1.2, centers=(-14.36, 0), absolute_centers=True)
+    """
+
+    def test_params_are_finite(self):
+        """Patched model.guess() returns finite values for all free parameters."""
+        model = tc_models.Const_2GaussModel_fast()
+        model.guess = lambda data, x: _guess_multiline2_d(
+            self=model, data=data, x=x, sigma0=1.2, heights=(1, 4), centers=(-2, 0)
+        )
+        pars = model.guess(_GUESS_Y, _GUESS_X)
+        for name, par in pars.items():
+            if par.expr is None and par.vary:
+                assert np.isfinite(par.value), f"Non-finite guess for '{name}'"
+
+    def test_deltax_relative(self):
+        """deltax = sigma0*(centers[0]-centers[1]) with absolute_centers=False."""
+        model = tc_models.Const_2GaussModel_fast()
+        S0, C0, C1 = 1.2, -3.0, 0.0
+        model.guess = lambda data, x: _guess_multiline2_d(
+            self=model,
+            data=data,
+            x=x,
+            sigma0=S0,
+            centers=(C0, C1),
+            absolute_centers=False,
+        )
+        pars = model.guess(_GUESS_Y, _GUESS_X)
+        expected = S0 * (C0 - C1)
+        assert abs(pars["deltax"].value - expected) < 1e-10, (
+            f"deltax={pars['deltax'].value:.8g}, expected={expected:.8g}"
+        )
+
+    def test_deltax_absolute(self):
+        """deltax = centers[0]-centers[1] with absolute_centers=True.
+
+        Reproduces the SII script pattern: centers=(-14.36, 0), absolute_centers=True
+        gives deltax = -14.36 regardless of the guessed peak position.
+        """
+        model = tc_models.Const_2GaussModel_fast()
+        OFF0, OFF1 = -14.36, 0.0
+        model.guess = lambda data, x: _guess_multiline2_d(
+            self=model,
+            data=data,
+            x=x,
+            centers=(OFF0, OFF1),
+            absolute_centers=True,
+        )
+        pars = model.guess(_GUESS_Y, _GUESS_X)
+        expected = OFF0 - OFF1
+        assert abs(pars["deltax"].value - expected) < 1e-10, (
+            f"deltax={pars['deltax'].value:.8g}, expected={expected:.8g}"
+        )
+
+    def test_height_ratio_matches_input(self):
+        """g1_height / g2_height = heights[0] / heights[1]."""
+        model = tc_models.Const_2GaussModel_fast()
+        H0, H1 = 1.0, 4.0
+        model.guess = lambda data, x: _guess_multiline2_d(
+            self=model, data=data, x=x, heights=(H0, H1)
+        )
+        pars = model.guess(_GUESS_Y, _GUESS_X)
+        actual_ratio = pars["g1_height"].value / pars["g2_height"].value
+        assert abs(actual_ratio - H0 / H1) < 1e-10, (
+            f"height ratio={actual_ratio:.6g}, expected={H0 / H1:.6g}"
+        )
+
+
+class TestGuessMultiline3D:
+    """Direct tests for _guess_multiline3_d (fast 3-component guess helper).
+
+    Outputs: ``deltax = g1_center - g2_center``,
+             ``deltaxhi = g3_center - g2_center``.
+    """
+
+    def test_params_are_finite(self):
+        """Patched model.guess() returns finite values for all free parameters."""
+        model = tc_models.Const_3GaussModel_fast()
+        model.guess = lambda data, x: _guess_multiline3_d(
+            self=model, data=data, x=x, sigma0=1.2
+        )
+        pars = model.guess(_GUESS_Y, _GUESS_X)
+        for name, par in pars.items():
+            if par.expr is None and par.vary:
+                assert np.isfinite(par.value), f"Non-finite guess for '{name}'"
+
+    def test_deltax_relative(self):
+        """deltax and deltaxhi encode offsets from g2 with absolute_centers=False.
+
+        deltax   = sigma0*(centers[0]-centers[1])
+        deltaxhi = sigma0*(centers[2]-centers[1])
+        """
+        model = tc_models.Const_3GaussModel_fast()
+        S0, CENTS = 1.2, (-3.0, 0.0, 2.5)
+        model.guess = lambda data, x: _guess_multiline3_d(
+            self=model,
+            data=data,
+            x=x,
+            sigma0=S0,
+            centers=CENTS,
+            absolute_centers=False,
+        )
+        pars = model.guess(_GUESS_Y, _GUESS_X)
+        assert abs(pars["deltax"].value - S0 * (CENTS[0] - CENTS[1])) < 1e-10, (
+            f"deltax={pars['deltax'].value:.8g}, expected={S0 * (CENTS[0] - CENTS[1]):.8g}"
+        )
+        assert abs(pars["deltaxhi"].value - S0 * (CENTS[2] - CENTS[1])) < 1e-10, (
+            f"deltaxhi={pars['deltaxhi'].value:.8g}, expected={S0 * (CENTS[2] - CENTS[1]):.8g}"
+        )
+
+    def test_deltax_absolute(self):
+        """deltax = centers[0]-centers[1] and deltaxhi = centers[2]-centers[1] with absolute_centers=True."""
+        model = tc_models.Const_3GaussModel_fast()
+        OFFS = (-14.0, 0.0, 21.0)
+        model.guess = lambda data, x: _guess_multiline3_d(
+            self=model,
+            data=data,
+            x=x,
+            centers=OFFS,
+            absolute_centers=True,
+        )
+        pars = model.guess(_GUESS_Y, _GUESS_X)
+        assert abs(pars["deltax"].value - (OFFS[0] - OFFS[1])) < 1e-10, (
+            f"deltax={pars['deltax'].value:.8g}, expected={OFFS[0] - OFFS[1]:.8g}"
+        )
+        assert abs(pars["deltaxhi"].value - (OFFS[2] - OFFS[1])) < 1e-10, (
+            f"deltaxhi={pars['deltaxhi'].value:.8g}, expected={OFFS[2] - OFFS[1]:.8g}"
+        )
+
+
+class TestGuessMultiline4D:
+    """Direct tests for _guess_multiline4_d (fast 4-component guess helper).
+
+    g4 is the reference; deltax{1,2,3} = g{1,2,3}_center - g4_center.
+    """
+
+    def test_params_are_finite(self):
+        """Patched model.guess() returns finite values for all free parameters."""
+        model = tc_models.Const_4GaussModel_fast()
+        model.guess = lambda data, x: _guess_multiline4_d(
+            self=model, data=data, x=x, sigma0=1.5
+        )
+        pars = model.guess(_GUESS_Y, _GUESS_X)
+        for name, par in pars.items():
+            if par.expr is None and par.vary:
+                assert np.isfinite(par.value), f"Non-finite guess for '{name}'"
+
+    def test_deltax_relative(self):
+        """deltax{1,2,3} = sigma0*(centers[{0,1,2}]-centers[3]) with absolute_centers=False.
+
+        The guessed center cancels out of all three deltax values, so the
+        assertion is exact regardless of what guess_from_peak returns.
+        """
+        model = tc_models.Const_4GaussModel_fast()
+        S0 = 1.5
+        CENTS = (-2.0, -1.0, 1.0, 2.0)  # g4 is at centers[3]
+        model.guess = lambda data, x: _guess_multiline4_d(
+            self=model,
+            data=data,
+            x=x,
+            sigma0=S0,
+            centers=CENTS,
+            absolute_centers=False,
+        )
+        pars = model.guess(_GUESS_Y, _GUESS_X)
+        for i, key in enumerate(("deltax1", "deltax2", "deltax3")):
+            expected = S0 * (CENTS[i] - CENTS[3])
+            assert abs(pars[key].value - expected) < 1e-10, (
+                f"{key}={pars[key].value:.8g}, expected={expected:.8g}"
+            )
+
+    def test_deltax_absolute(self):
+        """deltax{1,2,3} = centers[{0,1,2}]-centers[3] with absolute_centers=True."""
+        model = tc_models.Const_4GaussModel_fast()
+        OFFS = (-9.0, -6.0, -3.0, 0.0)  # g4 at centers[3]
+        model.guess = lambda data, x: _guess_multiline4_d(
+            self=model,
+            data=data,
+            x=x,
+            centers=OFFS,
+            absolute_centers=True,
+        )
+        pars = model.guess(_GUESS_Y, _GUESS_X)
+        for i, key in enumerate(("deltax1", "deltax2", "deltax3")):
+            expected = OFFS[i] - OFFS[3]
+            assert abs(pars[key].value - expected) < 1e-10, (
+                f"{key}={pars[key].value:.8g}, expected={expected:.8g}"
+            )
+
+
+class TestGuessMultiline6D:
+    """Direct tests for _guess_multiline6_d (fast 6-component guess helper).
+
+    g4 is the reference; deltax{1,2,3,5,6} = g{1,2,3,5,6}_center - g4_center.
+    (There is no deltax4 — g4_center is the free reference parameter.)
+    """
+
+    def test_params_are_finite(self):
+        """Patched model.guess() returns finite values for all free parameters."""
+        model = tc_models.Const_6GaussModel_fast()
+        model.guess = lambda data, x: _guess_multiline6_d(
+            self=model, data=data, x=x, sigma0=1.5
+        )
+        pars = model.guess(_GUESS_Y, _GUESS_X)
+        for name, par in pars.items():
+            if par.expr is None and par.vary:
+                assert np.isfinite(par.value), f"Non-finite guess for '{name}'"
+
+    def test_deltax_relative(self):
+        """deltax{1,2,3,5,6} = sigma0*(centers[{0,1,2,4,5}]-centers[3]) with absolute_centers=False."""
+        model = tc_models.Const_6GaussModel_fast()
+        S0 = 1.5
+        CENTS = (-2.0, -1.0, 1.0, 2.0, 5.0, 6.0)  # g4 is at centers[3]
+        model.guess = lambda data, x: _guess_multiline6_d(
+            self=model,
+            data=data,
+            x=x,
+            sigma0=S0,
+            centers=CENTS,
+            absolute_centers=False,
+        )
+        pars = model.guess(_GUESS_Y, _GUESS_X)
+        for c_idx, key in (
+            (0, "deltax1"),
+            (1, "deltax2"),
+            (2, "deltax3"),
+            (4, "deltax5"),
+            (5, "deltax6"),
+        ):
+            expected = S0 * (CENTS[c_idx] - CENTS[3])
+            assert abs(pars[key].value - expected) < 1e-10, (
+                f"{key}={pars[key].value:.8g}, expected={expected:.8g}"
+            )
+
+    def test_deltax_absolute(self):
+        """deltax{1,2,3,5,6} = centers[{0,1,2,4,5}]-centers[3] with absolute_centers=True."""
+        model = tc_models.Const_6GaussModel_fast()
+        OFFS = (-8.0, -5.0, -2.0, 0.0, 3.0, 7.0)  # g4 at centers[3]
+        model.guess = lambda data, x: _guess_multiline6_d(
+            self=model,
+            data=data,
+            x=x,
+            centers=OFFS,
+            absolute_centers=True,
+        )
+        pars = model.guess(_GUESS_Y, _GUESS_X)
+        for c_idx, key in (
+            (0, "deltax1"),
+            (1, "deltax2"),
+            (2, "deltax3"),
+            (4, "deltax5"),
+            (5, "deltax6"),
+        ):
+            expected = OFFS[c_idx] - OFFS[3]
+            assert abs(pars[key].value - expected) < 1e-10, (
+                f"{key}={pars[key].value:.8g}, expected={expected:.8g}"
+            )

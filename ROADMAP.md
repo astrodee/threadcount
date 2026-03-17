@@ -110,7 +110,7 @@ This item adds the tests identified as missing in §1.4.  Source-code bug fixes 
 **E. Add a `Quadratic_*` fit test with a genuine non-zero continuum background** ✅
 - Added `test_fit_recovers_quadratic_baseline` to `TestQuadratic1GaussModel`, `TestQuadratic2GaussModel`, and `TestQuadratic3GaussModel`.  Injects a combined arch+tilt baseline (`a_arch*(x−x_mid)²  + slope*(x−x_mid)`, arch ~25% of peak height, tilt ~12.5% edge-to-edge), starts the fit with `a=b=0` and `c=C_orig`, and asserts the recovered `a` and `b` are within 10% of truth.
 
-**F. Add direct tests for `_guess_multiline2` and `_guess_multiline3`**
+**F. Add direct tests for `_guess_multiline2` and `_guess_multiline3`** ✅
 - Add a `TestGuessMultiline2` class: call `model.guess(y, x=x)` after patching the bound method, verify the returned parameters are finite and the center offsets follow the formula.
 - Add a `TestGuessMultiline3` class similarly.
 - For the fast variants add `TestGuessMultiline2D`, `TestGuessMultiline3D`, `TestGuessMultiline4D`, `TestGuessMultiline6D` in the same style.
