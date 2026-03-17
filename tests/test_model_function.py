@@ -1764,7 +1764,14 @@ class TestConst4GaussModelFast:
         result = model.fit(y, pars, x=x, method="least_squares")
         assert result.redchi < 1e-4, f"redchi={result.redchi:.3g}"
         _assert_close(result.params["g4_center"].value, self.G4_CEN, "g4_center")
+        _assert_close(result.params["g1_height"].value, self.H1, "g1_height")
+        _assert_close(result.params["g2_height"].value, self.H2, "g2_height")
+        _assert_close(result.params["g3_height"].value, self.H3, "g3_height")
         _assert_close(result.params["g4_height"].value, self.H4, "g4_height")
+        _assert_close(result.params["g1_sigma"].value, self.SIG, "g1_sigma")
+        _assert_close(result.params["g2_sigma"].value, self.SIG, "g2_sigma")
+        _assert_close(result.params["g3_sigma"].value, self.SIG, "g3_sigma")
+        _assert_close(result.params["g4_sigma"].value, self.SIG, "g4_sigma")
         _assert_close(result.params["deltax1"].value, self.DELTAX1, "deltax1")
         _assert_close(result.params["deltax2"].value, self.DELTAX2, "deltax2")
         _assert_close(result.params["deltax3"].value, self.DELTAX3, "deltax3")
@@ -1822,6 +1829,8 @@ class TestConst4GaussModelFast:
         for (fc, fh), (tc, th) in zip(fitted, truth):
             _assert_close(fc, tc, f"center@{tc:.1f}")
             _assert_close(fh, th, f"height@{tc:.1f}")
+        for i in (1, 2, 3, 4):
+            _assert_close(result.params[f"g{i}_sigma"].value, SIG, f"g{i}_sigma")
         _assert_close(result.params["c"].value, C, "c")
 
 
@@ -2110,8 +2119,22 @@ class TestConst6GaussModelFast:
         result = model.fit(y, pars, x=x, method="least_squares")
         assert result.redchi < 1e-4, f"redchi={result.redchi:.3g}"
         _assert_close(result.params["g4_center"].value, self.G4_CEN, "g4_center")
+        _assert_close(result.params["g1_height"].value, self.H1, "g1_height")
+        _assert_close(result.params["g2_height"].value, self.H2, "g2_height")
+        _assert_close(result.params["g3_height"].value, self.H3, "g3_height")
         _assert_close(result.params["g4_height"].value, self.H4, "g4_height")
+        _assert_close(result.params["g5_height"].value, self.H5, "g5_height")
+        _assert_close(result.params["g6_height"].value, self.H6, "g6_height")
+        _assert_close(result.params["g1_sigma"].value, self.SIG, "g1_sigma")
+        _assert_close(result.params["g2_sigma"].value, self.SIG, "g2_sigma")
+        _assert_close(result.params["g3_sigma"].value, self.SIG, "g3_sigma")
+        _assert_close(result.params["g4_sigma"].value, self.SIG, "g4_sigma")
+        _assert_close(result.params["g5_sigma"].value, self.SIG, "g5_sigma")
+        _assert_close(result.params["g6_sigma"].value, self.SIG, "g6_sigma")
         _assert_close(result.params["deltax1"].value, self.DELTAX1, "deltax1")
+        _assert_close(result.params["deltax2"].value, self.DELTAX2, "deltax2")
+        _assert_close(result.params["deltax3"].value, self.DELTAX3, "deltax3")
+        _assert_close(result.params["deltax5"].value, self.DELTAX5, "deltax5")
         _assert_close(result.params["deltax6"].value, self.DELTAX6, "deltax6")
         _assert_close(result.params["c"].value, self.C, "c")
 
@@ -2176,6 +2199,8 @@ class TestConst6GaussModelFast:
         for (fc, fh), (tc, th) in zip(fitted, truth):
             _assert_close(fc, tc, f"center@{tc:.1f}")
             _assert_close(fh, th, f"height@{tc:.1f}")
+        for i in (1, 2, 3, 4, 5, 6):
+            _assert_close(p[f"g{i}_sigma"].value, SIG, f"g{i}_sigma")
         _assert_close(p["c"].value, C, "c")
 
 
@@ -2194,11 +2219,12 @@ class TestConst6GaussModelConstrainedHaNIIFast:
 
     G4_CEN = 6563.0  # Hα (reference / systemic)
     DELTAX12, DELTAX34, DELTAX56 = -5.0, -5.0, -5.0
-    G1_H_FACTOR = 0.3  # outflow / systemic for NII 6548 pair
-    G3_H_FACTOR = 0.4  # outflow / systemic for Hα pair
-    G5_H_FACTOR = 0.3  # outflow / systemic for NII 6583 pair
+    G1_H_FACTOR = 0.30  # outflow / systemic for NII 6548 pair
+    G3_H_FACTOR = 0.40  # outflow / systemic for Hα pair
+    G5_H_FACTOR = 0.35  # outflow / systemic for NII 6583 pair (distinct from G1)
     G2_HEIGHT, G4_HEIGHT, G6_HEIGHT = 5.0, 15.0, 6.0
-    SIG = 1.2
+    SIG_SYS = 1.2  # systemic components (g2, g4, g6)
+    SIG_OUT = 1.8  # outflow components (g1, g3, g5) — broader, breaks degeneracy
     C = 1.0
 
     @pytest.fixture
@@ -2220,12 +2246,12 @@ class TestConst6GaussModelConstrainedHaNIIFast:
         x = np.linspace(6530.0, 6610.0, 300)
         y = (
             self.C
-            + _gauss(x, h1, c1, self.SIG)
-            + _gauss(x, h2, c2, self.SIG)
-            + _gauss(x, h3, c3, self.SIG)
-            + _gauss(x, h4, c4, self.SIG)
-            + _gauss(x, h5, c5, self.SIG)
-            + _gauss(x, h6, c6, self.SIG)
+            + _gauss(x, h1, c1, self.SIG_OUT)
+            + _gauss(x, h2, c2, self.SIG_SYS)
+            + _gauss(x, h3, c3, self.SIG_OUT)
+            + _gauss(x, h4, c4, self.SIG_SYS)
+            + _gauss(x, h5, c5, self.SIG_OUT)
+            + _gauss(x, h6, c6, self.SIG_SYS)
         )
         return x, y
 
@@ -2285,45 +2311,52 @@ class TestConst6GaussModelConstrainedHaNIIFast:
         pars = model.make_params(
             g1_h_factor=self.G1_H_FACTOR,
             deltax12=self.DELTAX12,
-            g1_sigma=self.SIG,
+            g1_sigma=self.SIG_OUT,
             g2_height=self.G2_HEIGHT,
-            g2_sigma=self.SIG,
+            g2_sigma=self.SIG_SYS,
             g3_h_factor=self.G3_H_FACTOR,
             deltax34=self.DELTAX34,
-            g3_sigma=self.SIG,
+            g3_sigma=self.SIG_OUT,
             g4_height=self.G4_HEIGHT,
             g4_center=self.G4_CEN,
-            g4_sigma=self.SIG,
+            g4_sigma=self.SIG_SYS,
             g5_h_factor=self.G5_H_FACTOR,
             deltax56=self.DELTAX56,
-            g5_sigma=self.SIG,
+            g5_sigma=self.SIG_OUT,
             g6_height=self.G6_HEIGHT,
-            g6_sigma=self.SIG,
+            g6_sigma=self.SIG_SYS,
             c=self.C,
         )
         assert np.allclose(model.eval(pars, x=x), y, rtol=1e-12)
 
     def test_fit_recovers_parameters(self, xy):
-        """Fit from near-truth initial params recovers key parameters to 5 %."""
+        """Fit from near-truth initial params recovers key parameters to 5 %.
+
+        Outflow components (g1, g3, g5) use SIG_OUT and systemic (g2, g4, g6)
+        use SIG_SYS so that the optimizer can distinguish each component.
+        h_factors and sigmas are checked directly by parameter name — no
+        sorting needed because the model's constraint expressions tie each
+        h_factor to its specific pair.
+        """
         x, y = xy
         model = tc_models.Const_6GaussModel_constrained_HaNII_fast()
         pars = model.make_params(
             g1_h_factor=self.G1_H_FACTOR * 0.9,
             deltax12=self.DELTAX12 * 1.1,
-            g1_sigma=self.SIG * 1.1,
+            g1_sigma=self.SIG_OUT * 1.1,
             g2_height=self.G2_HEIGHT * 1.1,
-            g2_sigma=self.SIG * 0.9,
+            g2_sigma=self.SIG_SYS * 0.9,
             g3_h_factor=self.G3_H_FACTOR * 0.9,
             deltax34=self.DELTAX34 * 1.1,
-            g3_sigma=self.SIG * 1.1,
+            g3_sigma=self.SIG_OUT * 0.9,
             g4_height=self.G4_HEIGHT * 1.1,
             g4_center=self.G4_CEN,
-            g4_sigma=self.SIG * 0.9,
+            g4_sigma=self.SIG_SYS * 1.1,
             g5_h_factor=self.G5_H_FACTOR * 0.9,
             deltax56=self.DELTAX56 * 1.1,
-            g5_sigma=self.SIG * 1.1,
+            g5_sigma=self.SIG_OUT * 1.1,
             g6_height=self.G6_HEIGHT * 1.1,
-            g6_sigma=self.SIG * 0.9,
+            g6_sigma=self.SIG_SYS * 0.9,
             c=self.C * 1.1,
         )
         result = model.fit(y, pars, x=x, method="least_squares")
@@ -2333,6 +2366,23 @@ class TestConst6GaussModelConstrainedHaNIIFast:
         _assert_close(result.params["g2_height"].value, self.G2_HEIGHT, "g2_height")
         _assert_close(result.params["g6_height"].value, self.G6_HEIGHT, "g6_height")
         _assert_close(result.params["c"].value, self.C, "c")
+        # g{1,3,5}_h_factor are explicit free parameters; the model's constraint
+        # expressions tie each ratio to its specific pair, so no sorting is needed.
+        _assert_close(
+            result.params["g1_h_factor"].value, self.G1_H_FACTOR, "g1_h_factor"
+        )
+        _assert_close(
+            result.params["g3_h_factor"].value, self.G3_H_FACTOR, "g3_h_factor"
+        )
+        _assert_close(
+            result.params["g5_h_factor"].value, self.G5_H_FACTOR, "g5_h_factor"
+        )
+        _assert_close(result.params["g1_sigma"].value, self.SIG_OUT, "g1_sigma")
+        _assert_close(result.params["g3_sigma"].value, self.SIG_OUT, "g3_sigma")
+        _assert_close(result.params["g5_sigma"].value, self.SIG_OUT, "g5_sigma")
+        _assert_close(result.params["g2_sigma"].value, self.SIG_SYS, "g2_sigma")
+        _assert_close(result.params["g4_sigma"].value, self.SIG_SYS, "g4_sigma")
+        _assert_close(result.params["g6_sigma"].value, self.SIG_SYS, "g6_sigma")
 
     def test_guess_produces_finite_params(self, xy):
         x, y = xy
@@ -2361,6 +2411,21 @@ class TestConst6GaussModelConstrainedHaNIIFast:
         )
         _assert_close(result.params["g2_height"].value, self.G2_HEIGHT, "g2_height")
         _assert_close(result.params["g6_height"].value, self.G6_HEIGHT, "g6_height")
+        _assert_close(
+            result.params["g1_h_factor"].value, self.G1_H_FACTOR, "g1_h_factor"
+        )
+        _assert_close(
+            result.params["g3_h_factor"].value, self.G3_H_FACTOR, "g3_h_factor"
+        )
+        _assert_close(
+            result.params["g5_h_factor"].value, self.G5_H_FACTOR, "g5_h_factor"
+        )
+        _assert_close(result.params["g1_sigma"].value, self.SIG_OUT, "g1_sigma")
+        _assert_close(result.params["g3_sigma"].value, self.SIG_OUT, "g3_sigma")
+        _assert_close(result.params["g5_sigma"].value, self.SIG_OUT, "g5_sigma")
+        _assert_close(result.params["g2_sigma"].value, self.SIG_SYS, "g2_sigma")
+        _assert_close(result.params["g4_sigma"].value, self.SIG_SYS, "g4_sigma")
+        _assert_close(result.params["g6_sigma"].value, self.SIG_SYS, "g6_sigma")
 
 
 # ===========================================================================

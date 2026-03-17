@@ -97,10 +97,13 @@ This item adds the tests identified as missing in §1.4.  Source-code bug fixes 
 - `TestConst4GaussModelConstrainedSIIFast.test_fit_from_auto_guess`: add assertions on `g2_height`, `deltax12`; tighten redchi threshold to `1e-3`.
 - `TestConst6GaussModelConstrainedHaNIIFast.test_fit_from_auto_guess`: add assertions on `g2_height`, `g6_height`; tighten redchi threshold to `1e-3`.
 
-**C. Check `g{1,3,5}_h_factor` in `Const_6GaussModel_constrained_HaNII_fast` fit-recovery test**
-- Extend `TestConst6GaussModelConstrainedHaNIIFast.test_fit_recovers_parameters` to assert `g1_h_factor`, `g3_h_factor`, `g5_h_factor` within 5 %.
+**C. Check `g{1,3,5}_h_factor` in `Const_6GaussModel_constrained_HaNII_fast` fit-recovery test** ✅
+- Extend `TestConst6GaussModelConstrainedHaNIIFast.test_fit_recovers_parameters` to assert `g1_h_factor`, `g3_h_factor`, `g5_h_factor` within 5 %; also assert all six `g{n}_sigma` values.
+- Use `SIG_OUT = 1.8` (outflow, g1/g3/g5) vs `SIG_SYS = 1.2` (systemic, g2/g4/g6) in the fixture to break the outflow/systemic degeneracy.  Set `G5_H_FACTOR = 0.35` (distinct from `G1_H_FACTOR = 0.30`) so all three ratios are individually identifiable.
+- Assertions use the named parameters directly (`g1_h_factor`, `g1_sigma`, etc.) — no sorting required because the model's constraint expressions (`g1_height = g1_h_factor * g2_height`, etc.) tie each h_factor to its specific pair unambiguously.
+- Same sigma and h_factor assertions added to `test_fit_from_auto_guess`.
 
-**D. Check all deltax and height values in 4G/6G `test_fit_recovers_parameters`**
+**D. Check all deltax and height values in 4G/6G `test_fit_recovers_parameters`** ✅
 - `TestConst4GaussModelFast`: add assertions for `g1_height`, `g2_height`, `g3_height`.
 - `TestConst6GaussModelFast`: add assertions for `deltax2`, `deltax3`, `deltax5` and `g1_height` through `g6_height`.
 
