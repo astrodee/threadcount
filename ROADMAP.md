@@ -107,8 +107,8 @@ This item adds the tests identified as missing in §1.4.  Source-code bug fixes 
 - `TestConst4GaussModelFast`: add assertions for `g1_height`, `g2_height`, `g3_height`.
 - `TestConst6GaussModelFast`: add assertions for `deltax2`, `deltax3`, `deltax5` and `g1_height` through `g6_height`.
 
-**E. Add a `Quadratic_*` fit test with a genuine non-zero continuum background**
-- Add `test_fit_recovers_quadratic_baseline` to `TestQuadratic1GaussModel` (and 2G/3G variants): inject a spectrum with `a=1e-4, b=-1.0` on top of the Gaussian flux, start the fit with `a=b=0`, and assert the recovered `a` and `b` are within 10 % of truth.
+**E. Add a `Quadratic_*` fit test with a genuine non-zero continuum background** ✅
+- Added `test_fit_recovers_quadratic_baseline` to `TestQuadratic1GaussModel`, `TestQuadratic2GaussModel`, and `TestQuadratic3GaussModel`.  Injects a combined arch+tilt baseline (`a_arch*(x−x_mid)²  + slope*(x−x_mid)`, arch ~25% of peak height, tilt ~12.5% edge-to-edge), starts the fit with `a=b=0` and `c=C_orig`, and asserts the recovered `a` and `b` are within 10% of truth.
 
 **F. Add direct tests for `_guess_multiline2` and `_guess_multiline3`**
 - Add a `TestGuessMultiline2` class: call `model.guess(y, x=x)` after patching the bound method, verify the returned parameters are finite and the center offsets follow the formula.
@@ -254,6 +254,46 @@ lmfit.Model.set_param_hint_endswith = _set_param_hints_endswith_conservative
 
 **Fix**: replace the body of `set_param_hints_endswith` in `lmfit_ext.py` with the same logic above — when a parameter already has a hint, take `max(existing_min, new_min)` and `min(existing_max, new_max)` before calling `set_param_hint`. Parameters with no prior hint are unaffected.
 - Add a test to `test_model_function.py` (or a new `test_lmfit_ext.py`): set `g2_sigma min=2` on a `Const_2GaussModel_fast`, call `set_param_hint_endswith("sigma", min=0.77)`, and assert `g2_sigma min` is still `2`.
+
+### 2.17 — Improve `_guess_*gauss` initial parameter estimates for non-flat continua
+
+The current `_guess_1gauss`, `_guess_2gauss`, and `_guess_3gauss` functions estimate the
+baseline constant `c` from the minimum value of the supplied spectrum.  When the true
+continuum has a non-zero quadratic shape (e.g. a concave-down arch over the window), the
+wing values are depressed below the flat-baseline level, so `c` is underestimated and the
+Gaussian heights are overestimated.  More critically, `a` and `b` are never touched by
+the guess — they remain at 0 — so the optimizer must discover all quadratic curvature
+from a flat starting point.  For strong curvature this leads to poor or failed convergence
+when starting from an auto-guess (`test_fit_recovers_quadratic_baseline` therefore uses
+near-truth Gaussian params rather than `model.guess()`).
+
+**Proposed fix**:
+1. **Wing-based quadratic pre-fit**: before estimating the Gaussian parameters, mask out
+   the central ±2σ region around the brightest peak and fit a degree-2 polynomial to the
+   remaining "continuum" pixels using `numpy.polyfit`.  Use the polynomial coefficients as
+   starting values for `a`, `b`, and `c`.  Subtract the polynomial from the spectrum
+   before estimating peak height, center, and sigma.
+2. **Sigma estimate for masking**: use a rough first-pass σ estimate (e.g. half the
+   half-width at half-max of the smoothed spectrum) to define the mask width.  The mask
+   need only be approximate — the goal is to exclude the obvious line core.
+3. **Flag for disabling**: expose a `polynomial_baseline=True` keyword on each guess
+   function (default `True` to improve behaviour; set `False` to restore the current
+   flat-baseline behaviour for backwards compatibility and unit-test isolation).
+
+**Testing**:
+- Add `test_fit_from_auto_guess_quadratic_baseline` to each `TestQuadratic_*GaussModel`
+  class: inject the same arch+tilt spectrum as `test_fit_recovers_quadratic_baseline`,
+  call `model.guess(y, x=x)` for the initial params (no manual seeding of Gaussian
+  params), fit with `method='least_squares'`, and assert `redchi < 1e-4` plus `a`/`b`
+  within 10% of truth.
+- Add a unit test for the wing-masking logic in isolation (given a known polynomial +
+  Gaussian, verify the pre-fit coefficients are within 5% of truth).
+
+**Scope**: `src/threadcount/models/models.py` (`_guess_1gauss`, `_guess_2gauss`,
+`_guess_3gauss`) and the corresponding fast-model functions in `models/fast_models.py`
+(`_guess_1gauss_d`, `_guess_2gauss_d`, `_guess_3gauss_d`).  The `Const_*GaussModel`
+family also uses these guess functions and will benefit automatically; the improvement is
+not limited to `Quadratic_*` models.
 
 ---
 

@@ -944,6 +944,62 @@ class TestQuadratic1GaussModel:
         assert guessed_pars["a"].value == pytest.approx(default_pars["a"].value)
         assert guessed_pars["b"].value == pytest.approx(default_pars["b"].value)
 
+    def test_fit_recovers_quadratic_baseline(self):
+        """Fit must recover non-zero a and b from a combined arch+tilt baseline.
+
+        Truth: a_arch*(x-x_mid)^2 + slope*(x-x_mid)  (concave-down arch, ~25%
+        of peak height, plus a gentle positive tilt ~12.5% of peak edge-to-edge).
+        Fit starts with a=b=0 and c=C — the optimizer must discover the curvature
+        and tilt from the residuals alone.  a and b must recover to within 10%.
+        """
+        x = np.linspace(4990.0, 5025.0, 140)
+        x_mid = 0.5 * (x[0] + x[-1])
+        half_w = 0.5 * (x[-1] - x[0])
+        arch_amp = self.H / 4  # 3.0  — 25% of peak
+        tilt_amp = self.H / 8  # 1.5  — 12.5% of peak, edge-to-edge
+        a_truth = -arch_amp / half_w**2
+        slope = tilt_amp / (x[-1] - x[0])
+        b_truth = -2 * a_truth * x_mid + slope
+        quad = a_truth * (x - x_mid) ** 2 + slope * (x - x_mid)
+        y = _make_1g(x, self.H, self.CEN, self.SIG, c=self.C) + quad
+        model = tc_models.Quadratic_1GaussModel()
+        pars = model.make_params(
+            g1_height=self.H,
+            g1_center=self.CEN,
+            g1_sigma=self.SIG,
+            a=0.0,
+            b=0.0,
+            c=self.C,
+        )
+        result = model.fit(y, pars, x=x, method="least_squares")
+        assert result.redchi < 1e-4, f"redchi={result.redchi:.3g}"
+        _assert_close(result.params["a"].value, a_truth, "a", rel_tol=0.10)
+        _assert_close(result.params["b"].value, b_truth, "b", rel_tol=0.10)
+
+    def test_fit_recovers_quadratic_baseline_from_auto_guess(self):
+        """Same arch+tilt baseline as test_fit_recovers_quadratic_baseline but
+        starting from model.guess() rather than near-truth Gaussian params.
+
+        guess() estimates Gaussian params from the data and leaves a=b=0, so
+        the optimizer must discover the curvature from a fully auto-guessed
+        starting point.
+        """
+        x = np.linspace(4990.0, 5025.0, 140)
+        x_mid = 0.5 * (x[0] + x[-1])
+        half_w = 0.5 * (x[-1] - x[0])
+        arch_amp = self.H / 4
+        tilt_amp = self.H / 8
+        a_truth = -arch_amp / half_w**2
+        slope = tilt_amp / (x[-1] - x[0])
+        b_truth = -2 * a_truth * x_mid + slope
+        quad = a_truth * (x - x_mid) ** 2 + slope * (x - x_mid)
+        y = _make_1g(x, self.H, self.CEN, self.SIG, c=self.C) + quad
+        model = tc_models.Quadratic_1GaussModel()
+        result = model.fit(y, model.guess(y, x=x), x=x, method="least_squares")
+        assert result.redchi < 1e-4, f"redchi={result.redchi:.3g}"
+        _assert_close(result.params["a"].value, a_truth, "a", rel_tol=0.10)
+        _assert_close(result.params["b"].value, b_truth, "b", rel_tol=0.10)
+
 
 # ===========================================================================
 # 7. Quadratic_2GaussModel
@@ -1053,6 +1109,74 @@ class TestQuadratic2GaussModel:
         guessed_pars = model.guess(y, x=x)
         assert guessed_pars["a"].value == pytest.approx(default_pars["a"].value)
         assert guessed_pars["b"].value == pytest.approx(default_pars["b"].value)
+
+    def test_fit_recovers_quadratic_baseline(self):
+        """Fit must recover non-zero a and b from a combined arch+tilt baseline.
+
+        Truth: a_arch*(x-x_mid)^2 + slope*(x-x_mid)  (concave-down arch, ~25%
+        of the narrow-component peak height, plus a gentle positive tilt ~12.5%
+        of peak edge-to-edge).  Fit starts with a=b=0 and c=C.
+        """
+        x = np.linspace(6535.0, 6595.0, 200)
+        x_mid = 0.5 * (x[0] + x[-1])
+        half_w = 0.5 * (x[-1] - x[0])
+        arch_amp = self.H_NARROW / 4  # 5.0  — 25% of narrow peak
+        tilt_amp = self.H_NARROW / 8  # 2.5  — 12.5% of narrow peak
+        a_truth = -arch_amp / half_w**2
+        slope = tilt_amp / (x[-1] - x[0])
+        b_truth = -2 * a_truth * x_mid + slope
+        quad = a_truth * (x - x_mid) ** 2 + slope * (x - x_mid)
+        y = (
+            self.C
+            + _gauss(x, self.H_NARROW, self.CEN, self.SIG_NARROW)
+            + _gauss(x, self.H_BROAD, self.CEN, self.SIG_BROAD)
+            + quad
+        )
+        model = tc_models.Quadratic_2GaussModel()
+        pars = model.make_params(
+            g1_height=self.H_BROAD,
+            g1_center=self.CEN,
+            g1_sigma=self.SIG_BROAD,
+            g2_height=self.H_NARROW,
+            g2_center=self.CEN,
+            g2_sigma=self.SIG_NARROW,
+            a=0.0,
+            b=0.0,
+            c=self.C,
+        )
+        result = model.fit(y, pars, x=x, method="least_squares")
+        assert result.redchi < 1e-4, f"redchi={result.redchi:.3g}"
+        _assert_close(result.params["a"].value, a_truth, "a", rel_tol=0.10)
+        _assert_close(result.params["b"].value, b_truth, "b", rel_tol=0.10)
+
+    def test_fit_recovers_quadratic_baseline_from_auto_guess(self):
+        """Same arch+tilt baseline as test_fit_recovers_quadratic_baseline but
+        starting from model.guess().
+
+        _guess_2gauss is designed for the narrow+broad co-centred layout used
+        in the class fixture, so it produces a valid Gaussian starting point.
+        a and b remain at 0 from the guess; the optimizer discovers them.
+        """
+        x = np.linspace(6535.0, 6595.0, 200)
+        x_mid = 0.5 * (x[0] + x[-1])
+        half_w = 0.5 * (x[-1] - x[0])
+        arch_amp = self.H_NARROW / 4
+        tilt_amp = self.H_NARROW / 8
+        a_truth = -arch_amp / half_w**2
+        slope = tilt_amp / (x[-1] - x[0])
+        b_truth = -2 * a_truth * x_mid + slope
+        quad = a_truth * (x - x_mid) ** 2 + slope * (x - x_mid)
+        y = (
+            self.C
+            + _gauss(x, self.H_NARROW, self.CEN, self.SIG_NARROW)
+            + _gauss(x, self.H_BROAD, self.CEN, self.SIG_BROAD)
+            + quad
+        )
+        model = tc_models.Quadratic_2GaussModel()
+        result = model.fit(y, model.guess(y, x=x), x=x, method="least_squares")
+        assert result.redchi < 1e-4, f"redchi={result.redchi:.3g}"
+        _assert_close(result.params["a"].value, a_truth, "a", rel_tol=0.10)
+        _assert_close(result.params["b"].value, b_truth, "b", rel_tol=0.10)
 
 
 # ===========================================================================
@@ -1376,6 +1500,48 @@ class TestQuadratic3GaussModel:
         guessed_pars = model.guess(y, x=x)
         assert guessed_pars["a"].value == pytest.approx(default_pars["a"].value)
         assert guessed_pars["b"].value == pytest.approx(default_pars["b"].value)
+
+    def test_fit_recovers_quadratic_baseline(self):
+        """Fit must recover non-zero a and b from a combined arch+tilt baseline.
+
+        Uses the same well-separated 3-component setup as test_fit_recovers_parameters
+        (H=[4,15,6], three distinct centres) to avoid the degenerate symmetric
+        fixture.  Truth: arch ~25% of tallest peak, tilt ~12.5% of tallest peak.
+        Fit starts with a=b=0 and c=C.
+        """
+        H1, H2, H3 = 4.0, 15.0, 6.0
+        c1, c2, c3 = self.CEN - 6.0, self.CEN, self.CEN + 5.0
+        SIG = 1.3
+        C = 1.5
+        x = np.linspace(6530.0, 6600.0, 200)
+        x_mid = 0.5 * (x[0] + x[-1])
+        half_w = 0.5 * (x[-1] - x[0])
+        arch_amp = H2 / 4  # 3.75  — 25% of tallest peak
+        tilt_amp = H2 / 8  # 1.875 — 12.5% of tallest peak
+        a_truth = -arch_amp / half_w**2
+        slope = tilt_amp / (x[-1] - x[0])
+        b_truth = -2 * a_truth * x_mid + slope
+        quad = a_truth * (x - x_mid) ** 2 + slope * (x - x_mid)
+        y = _make_3g(x, H1, c1, SIG, H2, c2, SIG, H3, c3, SIG, c=C) + quad
+        model = tc_models.Quadratic_3GaussModel()
+        pars = model.make_params(
+            g1_height=H1,
+            g1_center=c1,
+            g1_sigma=SIG,
+            g2_height=H2,
+            g2_center=c2,
+            g2_sigma=SIG,
+            g3_height=H3,
+            g3_center=c3,
+            g3_sigma=SIG,
+            a=0.0,
+            b=0.0,
+            c=C,
+        )
+        result = model.fit(y, pars, x=x, method="least_squares")
+        assert result.redchi < 1e-4, f"redchi={result.redchi:.3g}"
+        _assert_close(result.params["a"].value, a_truth, "a", rel_tol=0.10)
+        _assert_close(result.params["b"].value, b_truth, "b", rel_tol=0.10)
 
 
 # ===========================================================================
