@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import mpdaf.obj
 import numpy as np
 import pytest
+from mpdaf.obj import WCS as MpdafWCS
 
 import threadcount as tc
 
@@ -56,8 +57,13 @@ def synthetic_cube():
     var = np.full_like(data, noise_sigma**2)
 
     # Build the mpdaf WaveCoord and Cube
+    # A minimal spatial WCS is required so that tc.fit.spatial_average can
+    # successfully assign Images back into the output Cube (mpdaf checks WCS
+    # compatibility in Cube.__setitem__; a cube with wcs=None raises
+    # AttributeError even though _has_wcs is True).
     wave = mpdaf.obj.WaveCoord(crval=WAVE_START, cdelt=WAVE_STEP, cunit="Angstrom")
-    cube = mpdaf.obj.Cube(data=data, var=var, wave=wave, unit=tc.fit.FLAM16)
+    wcs = MpdafWCS(cdelt=(0.2, 0.2), crval=(0, 0))
+    cube = mpdaf.obj.Cube(data=data, var=var, wave=wave, wcs=wcs, unit=tc.fit.FLAM16)
 
     return cube
 

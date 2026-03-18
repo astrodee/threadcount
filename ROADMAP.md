@@ -179,7 +179,7 @@ This item adds the tests identified as missing in §1.6. Source-code bug fixes r
 
 Broken into five sequential sub-steps.  Each can be implemented and run independently.  All live in a new file `tests/test_smoke_fit_lines.py`.
 
-#### 1.7a — `update_settings` unit test
+#### 1.7a — `update_settings` unit test ✅
 
 Call `fit_lines.update_settings(s)` with a copy of the `default_settings` fixture (to avoid mutating the session fixture) and assert:
 
@@ -189,7 +189,7 @@ Call `fit_lines.update_settings(s)` with a copy of the `default_settings` fixtur
 
 This is pure Python with no file I/O and runs in milliseconds.
 
-#### 1.7b — Single-spaxel fit test
+#### 1.7b — Single-spaxel fit test ✅
 
 Without calling the full pipeline, manually build the inputs that `fit_line.run()` would produce for one spaxel and call `fit_line.process_single_spectrum()` directly:
 
@@ -204,6 +204,14 @@ Assert:
 - `result[0].params["g1_center"].value` is within 0.5 Å of `LINE_CENTER`.
 
 Use a plain `SimpleNamespace` for `s` — only needs `lmfit_kwargs`, `chop_bandwidth`, and `instrument_dispersion_rest`.
+
+**Bugs and gaps found while implementing 1.7b:**
+
+- **`synthetic_cube` in conftest.py lacked a spatial WCS** — `tc.fit.spatial_average` clones the input cube and assigns mpdaf Images back into it. mpdaf's `Cube.__setitem__` checks WCS compatibility whenever *both* objects have `_has_wcs = True`. A `Cube` created without an explicit `wcs=` argument gets `_has_wcs = True` but `wcs = None` (an inconsistent internal state), causing `AttributeError: 'NoneType' object has no attribute 'get_step'`. Fixed in conftest.py by passing `wcs=MpdafWCS(cdelt=(0.2, 0.2), crval=(0, 0))`.
+
+- **`is True` identity check for numpy bool in `process_single_spectrum`** — The NaN-SNR guard `np.isnan(snr_image[idx]) is True` uses Python identity comparison. `np.isnan()` returns `numpy.bool_` (confirmed numpy 1.26.4), which is **not** the Python `True` singleton, so the expression always evaluates to `False`. Spaxels with `snr_image[idx] = np.nan` are therefore not skipped — they are passed straight to the fitter. Added `test_snr_nan_skips_spaxel` marked `xfail(strict=True)` to document this. Fix: replace `is True` with a plain truthiness check `np.isnan(snr_image[idx])`. Fix target: Phase 2.
+
+- **Missing test for SNR below threshold** — The happy-path test uses `snr_image = 999.0` everywhere. Added `test_snr_below_threshold_returns_none_list` that verifies `snr_image = 1.0 < threshold = 3` correctly returns `[None]` without fitting.
 
 #### 1.7c — `fit_line.run()` for a single line, no MC, no file I/O
 
@@ -658,6 +666,26 @@ if indices:
 - `tests/test_result_dict.py::TestResultDictLoadtxtErrors::test_single_spaxel_round_trip` (Bug A)
 - `tests/test_result_dict.py::TestResultDictRoundTripNoCoordinates::test_no_coordinates_round_trip` (Bug B)
 - `tests/test_result_dict.py::TestResultDictRoundTripNoCoordinates::test_no_coordinates_nan_round_trip` (Bug B)
+
+---
+
+### 2.20 — Fix NaN-SNR guard in `process_single_spectrum`
+
+In `procedures/fit_line.py`, the guard that skips spaxels with a NaN SNR value reads:
+
+```python
+if (snr_image[idx] < snr_threshold) or (np.isnan(snr_image[idx]) is True):
+```
+
+`np.isnan()` returns `numpy.bool_`, which is **not** the Python `True` singleton, so the `is True` identity comparison always evaluates to `False`.  Spaxels whose SNR is `NaN` are therefore never skipped — they are passed straight to the fitter, which can produce a spurious fit or crash depending on the spectrum.
+
+**Fix**: replace the identity check with a plain truthiness test:
+
+```python
+if (snr_image[idx] < snr_threshold) or np.isnan(snr_image[idx]):
+```
+
+**Tests**: `tests/test_smoke_fit_lines.py::TestSingleSpaxelFit::test_snr_nan_skips_spaxel` is marked `xfail(strict=True)` and will turn green once this fix is applied.
 
 ---
 
