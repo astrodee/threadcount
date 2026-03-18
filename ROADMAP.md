@@ -128,10 +128,52 @@ Cover `fit.py` `get_param_values` and `lmfit_ext.py` `summary_array`:
 - Given a known `ModelResult`, the extraction returns the correct values.
 - Tests for the "try three different extraction methods" fallback chain — each branch should be individually testable.
 
-### 1.6 — Tests for `ResultDict`
+### 1.6 — Tests for `ResultDict` ✅
 Cover `fit.py` `ResultDict`:
 - `savetxt` / `loadtxt` round-trip produces identical data.
 - Works with NaN-containing arrays (the normal case for masked cubes).
+
+**Code-review gaps and bugs found after completing the initial test set:**
+
+- **`loadtxt` crashes on a 1×1 spatial grid (single-spaxel file)** — `np.loadtxt` returns a 1D array when the file contains exactly one data row. `loadtxt` then does `data[:, index]` which raises `IndexError: too many indices for array`. Any run on a cube with a single fitted spaxel will fail at the save/reload step. `test_result_dict.py::TestResultDictLoadtxtErrors::test_single_spaxel_round_trip` is marked `xfail(strict=True)` to document this. Fix in §2.19.
+
+- **Missing `loadtxt` ValueError test** — the class docstring listed "loadtxt raises ValueError when row/col indices cannot be matched" as a coverage target, but no test existed. Added `test_mismatched_row_col_raises`: writes four rows that cover only the (0,1) and (1,0) pairs in a nominally 2×2 grid, causing the col comparison inside `loadtxt` to fail.
+
+- **Missing no-coordinate round-trip test, and a second `loadtxt` crash discovered** — no test exercised the `len(indices) == 0` branch (files saved with `generate_pixel_coordinates=False`). Adding those tests exposed a second bug: `np.lexsort(())` raises `TypeError` when `indices` is empty because the guard `if len(indices) == 0` is in the wrong place — the `lexsort` call is unconditional and runs before the guard is checked. Both no-coordinate tests are marked `xfail(strict=True)`. Fix in §2.19.
+
+**Bugs already documented but not yet fixed (fix tasks are in Phase 2):**
+- `loadtxt` 1D-array crash on single-spaxel (1×1) files — fix in §2.19.
+- `loadtxt` unconditional `np.lexsort(())` crash when no dimension columns (no-coordinate files) — fix in §2.19.
+
+**Additional code-review gaps found during the §1.6 post-completion review (addressed in §1.6a):**
+
+- **`test_mismatched_row_col_raises` tests a reshape failure, not the comparison branch** — the test data has rows `(0,1),(0,1),(1,0),(1,0)`. After lexsort the last col value is `0`, giving `max_col=0` and `new_shape=[3,2,1]`. Reshaping 12 elements into `(3,2,1)=6` elements raises `ValueError` *before* the comparison branch is ever reached. The test comment ("col_readin [[1,1],[0,0]] ≠ col_regenerated [[0,1],[0,1]]") describes a scenario that never occurs with this data. The actual comparison check `result[base_name] != result[readin_name]` is completely untested. To exercise it, the file must have exactly `(max_row+1)*(max_col+1)` rows but with duplicate diagonal pairs, e.g. `(0,0),(0,0),(1,1),(1,1)` — these reshape to `(3,2,2)` successfully but yield `col_readin=[[0,0],[1,1]] ≠ col_regenerated=[[0,1],[0,1]]`.
+
+- **3D spatial arrays (panel dimension) are completely untested** — `DIM_NAMES=("panel","row","col")` explicitly supports 3D spatial arrays, but no test constructs or round-trips a `(n_maps, n_panels, n_rows, n_cols)` shaped array. The `loadtxt` reshape path for 3D grids is also untested.
+
+- **`data_dict` + `data_array` combined construction is untested** — the constructor docstring explicitly describes the merge pattern (data_dict initialises the OrderedDict, then data_array/names update it, with overlapping keys overridden), but no test exercises this combination.
+
+- **`names=None` auto-generation is untested** — when `data_array` is provided without `names`, the constructor silently generates `["data_0", "data_1", ...]`. No test verifies this path.
+
+- **`generate_pixel_coordinates=True` (default) with `data_dict`-only construction is untested** — `test_from_data_dict` always passes `generate_pixel_coordinates=False`. The default `True` path (where coordinates are generated from the first value in a dict-only input) has no test.
+
+---
+
+### 1.6a — Fill the test coverage gaps documented by the §1.6 code review ✅
+
+This item adds the tests identified as missing in §1.6. Source-code bug fixes remain in Phase 2 (§2.19). Tests that depend on a Phase 2 fix (single-spaxel, no-coordinate round-trips) remain `xfail` until §2.19 is implemented.
+
+**A. Fix `test_mismatched_row_col_raises` to actually exercise the comparison branch**
+- Replace the current four-row data (which has duplicated `(0,1)` and `(1,0)` pairs) with data containing duplicate diagonal pairs `(0,0),(0,0),(1,1),(1,1)`. These produce `max_row=1, max_col=1`, reshape to `(3,2,2)` successfully, and then fail the comparison because `col_readin=[[0,0],[1,1]] ≠ col_regenerated=[[0,1],[0,1]]`.
+- Update the test docstring to accurately describe the failure mechanism.
+
+**B. Add a 3D spatial (panel + row + col) round-trip test**
+- Add `TestResultDictRoundTrip3D`: construct a `ResultDict` from a `(n_maps, 2, 3, 4)` array (2 panels, 3 rows, 4 cols), verify that `"panel"`, `"row"`, and `"col"` keys are inserted, and that a `savetxt`/`loadtxt` round-trip recovers identical data including all three coordinate arrays.
+
+**C. Add constructor edge-case tests to `TestResultDictConstruction`**
+- `test_combined_data_dict_and_data_array`: call `ResultDict(data_array=arr, names=["c"], data_dict={"a": x, "b": y})` and assert all three keys exist with correct values, and that the overlapping-key override behaviour is correct.
+- `test_names_none_autogenerates`: call `ResultDict(data_array=arr, names=None, generate_pixel_coordinates=False)` and assert keys are `["data_0", "data_1", ...]`.
+- `test_generate_pixel_coordinates_with_data_dict_only`: call `ResultDict(data_dict={"flux": arr2d})` (default `generate_pixel_coordinates=True`) and assert `"row"` and `"col"` are present with correct shapes.
 
 ### 1.7 — Integration smoke test for `fit_lines`
 Using the synthetic cube fixture from 1.1, run a minimal `fit_lines.run()` end-to-end. Assert:
@@ -313,6 +355,35 @@ except Exception:
 This correctly handles both `ModelResult` attributes and any other objects that may not have the requested attribute.
 
 **Test**: `tests/test_param_extraction.py::TestGetParamValuesModelResultAttribute` is marked `xfail(strict=True)` and will automatically turn green once this fix is applied.
+
+### 2.19 — Fix two `ResultDict.loadtxt` crashes on edge-case files
+
+Two separate code-path bugs exist in `loadtxt`, both discovered during the §1.6 test-coverage audit.  Neither can be triggered through normal multi-spaxel usage, which is why they went undetected.
+
+**Bug A — 1×1 spatial grid (single-row file)**
+`np.loadtxt` returns a 1D array when the file has exactly one data row. `loadtxt` then does `data[:, index]` which raises `IndexError: too many indices for array`.
+
+*Fix*: promote a 1D result to 2D immediately after the `np.loadtxt` call:
+```python
+data = np.loadtxt(fname, **loadtxt_kwargs)
+if data.ndim == 1:
+    data = data[np.newaxis, :]   # single row → shape (1, n_cols)
+```
+
+**Bug B — No-coordinate files (`generate_pixel_coordinates=False`)**
+When no `row`/`col` columns are present, `indices = []`.  The code then unconditionally calls `np.lexsort(tuple([...]))` which evaluates to `np.lexsort(())` and raises `TypeError: need sequence of keys with len > 0`.  The `if len(indices) == 0` guard that would skip the reshape path comes *after* this crash and is therefore unreachable.
+
+*Fix*: guard the `lexsort` and subsequent sort with `if indices:`:
+```python
+if indices:
+    ordering = np.lexsort(tuple([data[:, index] for index in reversed(indices)]))
+    data = data[ordering]
+```
+
+**Tests**: the following `xfail(strict=True)` tests will turn green once both fixes are applied:
+- `tests/test_result_dict.py::TestResultDictLoadtxtErrors::test_single_spaxel_round_trip` (Bug A)
+- `tests/test_result_dict.py::TestResultDictRoundTripNoCoordinates::test_no_coordinates_round_trip` (Bug B)
+- `tests/test_result_dict.py::TestResultDictRoundTripNoCoordinates::test_no_coordinates_nan_round_trip` (Bug B)
 
 ---
 
