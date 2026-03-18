@@ -50,6 +50,16 @@ dev = [
     "pre-commit",
 ]
 
+[tool.pytest.ini_options]
+filterwarnings = [
+    # This lmfit fork evaluates constrained parameter expressions (e.g. GaussianModel's
+    # `height = amplitude / max(1e-15, sigma)`) via the `uncertainties` library.
+    # `uncertainties` cannot propagate errors through `max()`, so it produces UFloat
+    # objects with std_dev=0 and emits this warning.  It is a known limitation of the
+    # lmfit fork, not actionable from test code.  Suppressed here to keep test output clean.
+    "ignore:Using UFloat objects with std_dev==0:UserWarning",
+]
+
 [tool.setuptools.dynamic]
 version = {attr = "threadcount.__version__"}
 

@@ -123,7 +123,7 @@ This item adds the tests identified as missing in §1.4.  Source-code bug fixes 
 
 ---
 
-### 1.5 — Tests for parameter extraction utilities
+### 1.5 — Tests for parameter extraction utilities ✅
 Cover `fit.py` `get_param_values` and `lmfit_ext.py` `summary_array`:
 - Given a known `ModelResult`, the extraction returns the correct values.
 - Tests for the "try three different extraction methods" fallback chain — each branch should be individually testable.
@@ -294,6 +294,25 @@ near-truth Gaussian params rather than `model.guess()`).
 (`_guess_1gauss_d`, `_guess_2gauss_d`, `_guess_3gauss_d`).  The `Const_*GaussModel`
 family also uses these guess functions and will benefit automatically; the improvement is
 not limited to `Quadratic_*` models.
+
+### 2.18 — Fix `get_param_values` branch 3 unreachable for `ModelResult` attributes
+
+The docstring for `get_param_values` in `fit.py` states:
+
+> If type('params') is `ModelResult`: Tries second: `params`.get(`param_name`), which allows for ModelResult attributes.
+
+In practice, the `ModelResult` class in this lmfit fork does **not** implement `.get()`, so `params.get(param_name, default_value)` immediately raises `AttributeError` and the `except AttributeError` guard returns `default_value`.  Branch 3 is therefore completely unreachable for `ModelResult` inputs — callers who rely on it to extract attributes like `redchi` or `chisqr` silently receive `nan` instead.
+
+**Fix**: replace the branch-3 `try` block with an explicit `getattr` call:
+```python
+try:
+    return getattr(params, param_name, default_value)
+except Exception:
+    return default_value
+```
+This correctly handles both `ModelResult` attributes and any other objects that may not have the requested attribute.
+
+**Test**: `tests/test_param_extraction.py::TestGetParamValuesModelResultAttribute` is marked `xfail(strict=True)` and will automatically turn green once this fix is applied.
 
 ---
 
