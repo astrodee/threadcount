@@ -176,10 +176,284 @@ This item adds the tests identified as missing in §1.6. Source-code bug fixes r
 - `test_generate_pixel_coordinates_with_data_dict_only`: call `ResultDict(data_dict={"flux": arr2d})` (default `generate_pixel_coordinates=True`) and assert `"row"` and `"col"` are present with correct shapes.
 
 ### 1.7 — Integration smoke test for `fit_lines`
-Using the synthetic cube fixture from 1.1, run a minimal `fit_lines.run()` end-to-end. Assert:
-- Output `.txt` files are created.
-- At least one spaxel was fitted without error.
-- Loading the results back via `ResultDict.loadtxt` succeeds.
+
+Broken into five sequential sub-steps.  Each can be implemented and run independently.  All live in a new file `tests/test_smoke_fit_lines.py`.
+
+#### 1.7a — `update_settings` unit test
+
+Call `fit_lines.update_settings(s)` with a copy of the `default_settings` fixture (to avoid mutating the session fixture) and assert:
+
+- `s.kernel` is a 2-D `numpy.ndarray` with `sum > 0` and odd side lengths centered on the origin.
+- `s.instrument_dispersion_rest == s.instrument_dispersion` (because `z_set = 0`).
+- `s.comment` is a non-empty string containing the key names `"instrument_dispersion"`, `"snr_lower_limit"`, and `"units"`.
+
+This is pure Python with no file I/O and runs in milliseconds.
+
+#### 1.7b — Single-spaxel fit test
+
+Without calling the full pipeline, manually build the inputs that `fit_line.run()` would produce for one spaxel and call `fit_line.process_single_spectrum()` directly:
+
+1. Create the spatially-averaged subcube by calling `tc.fit.spatial_average(subcube, kernel)` on `synthetic_cube.select_lambda(L_OIII5007.low, L_OIII5007.high)`.
+2. Build a trivial `snr_image` that passes every spaxel (all values = 999).
+3. Call `process_single_spectrum(subcube_av, snr_image, snr_threshold=3, models=[Const_1GaussModel()], s=settings_ns, idx=(5, 5))`.
+
+Assert:
+- The result is a list of length 1.
+- `result[0]` is not `None`.
+- `result[0].success is True`.
+- `result[0].params["g1_center"].value` is within 0.5 Å of `LINE_CENTER`.
+
+Use a plain `SimpleNamespace` for `s` — only needs `lmfit_kwargs`, `chop_bandwidth`, and `instrument_dispersion_rest`.
+
+#### 1.7c — `fit_line.run()` for a single line, no MC, no file I/O
+
+Build a settings `SimpleNamespace` that mirrors the `default_settings` fixture but sets `mc_n_iterations=0`, `save_plots=False`, and uses a 3×3 subregion of `synthetic_cube` (to keep runtime short).  Call `fit_line.run(s)` with `s.output_filename` pointing to `tmp_path`.
+
+Assert:
+- Returns without raising.
+- `s.model_results` has shape `(1, 3, 3)` (one model, 3×3 spatial).
+- At least one entry in `s.model_results[0]` is not `None`.
+- At least one non-`None` entry has `success=True`.
+
+Does not assert file content — that is covered in 1.7d.
+
+#### 1.7d — Output files are created
+
+Using the same setup as 1.7c (but with the full 10×10 `synthetic_cube` and `mc_n_iterations=0`), assert that after `fit_line.run(s)` all three expected `.txt` files exist in `tmp_path`:
+
+- `{output_filename}_5007_simple_model.txt`
+- `{output_filename}_5007_best_fit.txt` — only when `len(models) > 1` (test both cases: single model and two models).
+- `{output_filename}_5007_mc_best_fit.txt`
+
+Also assert each file is non-empty (file size > 0 bytes).
+
+#### 1.7e — `ResultDict.loadtxt` round-trip
+
+After the 1.7d run, load each `.txt` file with `ResultDict.loadtxt` and assert:
+
+- The returned object is a `ResultDict` (i.e. an `OrderedDict` subclass).
+- `"row"` and `"col"` keys are present.
+- The spatial shape inferred from `max(result["row"]) + 1` and `max(result["col"]) + 1` matches `(CUBE_NY, CUBE_NX)` = `(10, 10)`.
+- At least one row of data contains finite (non-NaN) values for `"g1_center"`.
+
+This is the end-to-end assertion that the full write→read cycle for the most important output file is intact.
+
+---
+
+### 1.8 — Tests for `fit.py` utility functions
+
+These are pure-logic functions with no GUI or mpdaf dependencies.  They are called throughout the pipeline and are the most likely things to silently break after a numpy or lmfit dependency bump.  Group them into three new test files.
+
+#### A. `test_fit_utilities.py` — small helper functions
+
+**`get_index`**
+- Single scalar `value`, single-element `array` → returns `0`.
+- Exact match returns the correct index.
+- Off-grid value returns the index of the nearest element (both directions, including tie-breaking towards the first element).
+- Vectorised call: `value` is a list → returns a list of ints of the same length.
+- Degenerate: `array` has one element, any `value` → always returns `0`.
+
+**`iter_spaxel`**
+- `index=False`: iterates over every pixel in row-major order, values match `image[y, x]`.
+- `index=True`: second yield element is the `(y, x)` tuple, and the full set of index tuples equals `set(np.ndindex(*image.shape))`.
+- Works for non-square arrays (3×5).
+- Works for a 1×1 array (single spaxel).
+
+**`get_region`**
+- Circle (`rx=2`, `ry=None`): all returned pixels satisfy `row²+col² ≤ rx²`.
+- Ellipse (`rx=3, ry=1`): correct pixel count and all pixels satisfy the ellipse inequality.
+- Passing a two-element list `[rx, ry]` as the first argument gives the same result as passing `rx` and `ry` separately.
+- `rx=0` returns only the origin `[0, 0]`.
+
+**`get_reg_image`**
+- Output shape is `(max_row − min_row + 1, max_col − min_col + 1)`.
+- All pixels in `region` are set to 1; all others are 0.
+- Round-trip with `get_region`: `get_reg_image(get_region(2)).sum()` equals `len(get_region(2))`.
+
+**`de_redshift`**
+- `z=0, z_initial=0` → `crval` and `step` unchanged.
+- `z=z_initial` → no change.
+- Known analytic case: `crval_out = crval_in * (1 + z_initial) / (1 + z)`.  Use a mock `WaveCoord`-like object with `get_crval`/`set_crval`/`get_step`/`set_step` to avoid an mpdaf dependency.
+- Return value is `z`.
+
+#### B. `test_aic.py` — AIC model-selection logic
+
+**`get_aic`**
+- Returns `model.aic_real` when `model.success is True`.
+- Returns `error` (default `np.nan`) when `model.success is False`.
+- Returns `error` when `model` has no `aic_real` attribute (`AttributeError`).
+- Returns `error` when `model` is `None` (no attribute at all).
+
+**`choose_model_aic_single`**
+- `model_list=None` → returns `-1`.
+- Single-element list → always returns `1`.
+- Two-model list, `aic[1] - aic[0] < d_aic` → returns `2`.
+- Two-model list, difference ≥ `d_aic` → returns `1`.
+- Two-model list, both AICs `nan` → returns `-1`.
+- Three-model list: all four branches of the decision tree (2-better-than-1-and-3-better-than-2, 2-better-than-1-but-3-not, 3-better-than-1-skipping-2, none-better) each return the correct index.
+- Custom `d_aic` threshold is respected.
+
+**`choose_model_aic`**
+- Single list (shape `(n_models,)`) delegates to `choose_model_aic_single` and returns a scalar.
+- 2D spatial array `(ny, nx, n_models)`: output shape is `(ny, nx)` and each element matches independent `choose_model_aic_single` calls.
+- Invalid spaxel (all-NaN AIC column) is assigned `-1` in the output array.
+
+**`get_ngaussians`**
+- Model with 0, 1, 2, 3 gaussian components returns the correct count.
+- Non-gaussian components (constant) are not counted.
+
+**`get_gcomponent_comparison`**
+- Single gaussian → returns `[]`.
+- Two gaussians: ratio and delta-center are correct to floating-point tolerance.
+- The main component (highest flux) is excluded from the output list.
+
+**`marginal_fits`**
+- `None` model (un-fitted spaxel) → `False` (no user check needed).
+- `model.success = False` → `True` (flag for inspection).
+- Single-gaussian model → `False`.
+- Two-gaussian model where secondary flux ratio and delta-centre are below both thresholds → `True`.
+- Two-gaussian model where either condition is not met → `False`.
+
+#### C. `test_stats_collection.py` — result harvesting chain
+
+**`get_model_keys`**
+- Single `ModelResult` → sorted list of parameter names, all present.
+- Array of `ModelResult` objects (some `None`) → uses the first non-None entry.
+- `ignore="fwhm height"` (string) → no returned key ends with any ignored suffix.
+- `ignore=["fwhm", "height"]` (list) → same.
+- All-`None` input → returns `[]`.
+
+**`get_header_stats`**
+- `fit_info="auto"` → first columns are `DEFAULT_FIT_INFO`, followed by `key` / `key_err` pairs.
+- `fit_info=None` → only `key` / `key_err` columns.
+- `model_keys=None` → only the `fit_info` columns, no crash.
+- Length of returned header is `len(fit_info) + 2 * len(model_keys)`.
+
+**`collect_stats`**
+- Given a real `ModelResult` and matching `model_keys`, each `[value, stderr]` pair is present and finite.
+- Missing key (key present in header but not in result params) → two `empty_value` entries.
+- `model_result=None` (or not a `ModelResult`) → returns a list of `empty_value` with the correct length.
+- `get_header_stats` and `collect_stats` always return matching lengths for the same inputs.
+
+**`RecursiveArray`**
+- Attribute access on a flat list distributes over elements and returns a `RecursiveArray`.
+- Call distributes over elements that are callable (use simple lambdas or `mock`).
+- `None` elements in a call are passed through as `None` rather than raising.
+- Nested (2D) construction wraps inner lists as `RecursiveArray` instances.
+- `aslist()` strips the wrapper and returns plain lists.
+- `array()` converts to a 1D `numpy.ndarray` with the correct `dtype`.
+
+#### D. `test_lmfit_ext.py` — `lmfit_ext` extensions
+
+These require a real `ModelResult` from a trivial fit (single gaussian on synthetic data); use the fixture pattern already established in `test_model_function.py`.
+
+**`aic_real` / `bic_real`**
+- `aic_real = chisqr + 2 * nvarys` (exact).
+- `bic_real = chisqr + log(ndata) * nvarys` (exact).
+- Both return `None` when called on an object missing `chisqr`.
+
+**`stderrsdict`**
+- Keys equal `params.keys()`.
+- Values equal the per-parameter `stderr` from the fit result.
+
+**`valerrsdict`**
+- For each parameter name `k`, both `k` (value) and `k + "_err"` (stderr) are present.
+- Values match those from the `ModelResult.params` directly.
+
+**`set_param_hints_endswith`**
+- After calling `model.set_param_hints_endswith("_sigma", min=0.5)` on a `Const_2GaussModel`, every parameter ending in `_sigma` has `min=0.5`; others are unchanged.
+- A suffix that matches no parameter is a no-op (no exception).
+
+**`order_gauss`**
+- Two-gaussian result where g2 has a smaller center than g1: after `order_gauss`, `g1_center < g2_center`.
+- When centers differ by less than `delta_x`, the taller component is placed second.
+- Single-gaussian result: returns immediately with no changes.
+- All expressions are cleared before reordering (no leftover `expr` strings).
+
+**`summary_array`**
+- With `fit_info=["redchi"]` and `param_info=["g1_center", "g1_center_err"]`: returns a 3-element float array matching `[result.redchi, result.params["g1_center"].value, result.params["g1_center"].stderr]`.
+- With empty `fit_info` and `param_info`: returns a zero-length array.
+
+---
+
+### 1.9 — Tests for procedure helper functions
+
+The five procedures (`open_cube_and_deredshift`, `fit_lines`, `fit_line`, `analyze_outflow_extent`, `explore_results`) divide into four categories:
+
+- **`open_cube_and_deredshift`** — pure orchestration glue (settings + mpdaf calls); no pure-logic helpers to extract. Its settings-processing behaviour is already covered by 1.2 and the smoke test in 1.7.
+- **`fit_lines`** — the top-level pipeline; covered end-to-end by 1.7.
+- **`explore_results`** — interactive matplotlib widget; not unit-testable.
+- **`set_rcParams`** — two wrappers around `mpl.rcParams`; trivial.
+
+That leaves two procedures with testable logic:
+
+#### A. `fit_line` sub-functions (`tests/test_procedures_fit_line.py`)
+
+`process_single_spectrum` contains the only branching logic not exercised by the 1.7 smoke test.  Use the synthetic cube fixture from 1.1 and real `Const_1GaussModel` / `Const_2GaussModel` instances so that the lmfit path is exercised without mocking.
+
+**`process_single_spectrum`**
+- SNR below threshold → returns `[None]` without fitting.
+- `snr_image` value is `np.nan` → returns `[None]`.
+- Single model, fit succeeds → returns a one-element list containing a successful `ModelResult`.
+- Two models, both succeed → returns a two-element list.
+- First model fails and `s.chop_bandwidth = False` → returns `[None]` immediately.
+- First model fails and `s.chop_bandwidth = True` → spectrum is narrowed by ±5 Å and the fit is retried; a successful second attempt returns a one-element list.
+
+**`choose_best_fits`**
+- Single model in list → `auto_aic_choices`, `user_check`, and `final_choices` are all `None`; no exception.
+- Multiple models, `interactively_choose_fits=False` → `final_choices` is populated from `choose_model_aic`; `always_manually_choose` entries in `user_check` are `True`.
+- `always_manually_choose=[]` (empty) → `user_check` is entirely determined by `marginal_fits`.
+
+#### B. `analyze_outflow_extent` helpers (`tests/test_procedures_analyze_outflow_extent.py`)
+
+All functions here are pure numpy; no mpdaf or matplotlib dependency.
+
+**`distance`**
+- `distance(origin[0], origin[1], origin)` → `0.0`.
+- Known Pythagorean triple: `distance(3, 4, [0, 0])` → `5.0`.
+- Works element-wise on numpy arrays of the same shape.
+
+**`sort_data`**
+- Unordered `x` → output `x` is monotonically increasing.
+- Masked array input: masked entries are removed (compressed) from both `x` and `data`.
+- `x` and `data` maintain the same correspondence after sorting.
+
+**`boxcar_average_1d`**
+- `width=1` → output equals input (identity).
+- `width=3` on a constant array → output equals input.
+- `width=3` on a step function: values at transition are averaged correctly.
+- `axis=1` applies smoothing along columns rather than rows.
+
+**`row_max`**
+- Returns two arrays of equal length (one per row of input).
+- First returned array is `np.arange(0, n_rows)`.
+- Obvious outlier column (single row with a far-off peak) is masked after sigma clipping.
+- Values above/below `center_row` are replaced by their respective medians.
+
+**`compute_gal_center_row`**
+- Synthetic image with a horizontal bright stripe at a known row → returns that row index.
+- Noisy low-flux columns at image edges do not shift the result (the 1% flux threshold filters them).
+
+**`radius_at_fraction`**
+- `values=[50]` on a uniform array of length `n` → returned radius is approximately `x[n//2]`.
+- `values` given as percentages (>1) are divided by 100 before use.
+- `return_string=True` → returns a list of strings of the form `"r_50 = ..."`.
+- Scalar `values` (not a list) does not raise (wraps to array internally).
+
+**`calculate_contours`**
+- Synthetic 5-row flux array with a known peak column per row → returned contour widths match the manually computed cumulative-sum half-widths.
+- A fully masked row produces a masked entry in the output (not a crash).
+- `levels` are sorted ascending before processing regardless of input order.
+
+**`create_outflow_mask`**
+- All pixels outside the contour region are `True`; pixels inside are `False`.
+- `which_contour` selects the correct level from `contour_levels`.
+- A masked `center_col` entry → that row is left fully masked (`True`) rather than raising.
+
+**`extract_wcs` / `process_arcsecs` / `process_units`** (header parsing)
+- `extract_wcs`: finds the `"wcs_step: (0.2, 0.2)"` comment line and returns `(0.2, 0.2)`.
+- `process_arcsecs`: numeric input is passed through unchanged; `"header"` triggers `extract_wcs`; missing `"wcs_step"` line raises `ValueError`.
+- `process_units`: string `"header"` reads from `"units: erg/s/cm2/A"` comment line; explicit string is converted to an `astropy.units.Unit`.
 
 ---
 
