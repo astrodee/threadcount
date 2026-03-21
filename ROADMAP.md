@@ -278,7 +278,7 @@ Both `simple_model.txt` and `mc_best_fit.txt` are checked. `best_fit.txt` is imp
 
 These are pure-logic functions with no GUI or mpdaf dependencies.  They are called throughout the pipeline and are the most likely things to silently break after a numpy or lmfit dependency bump.  Group them into three new test files.
 
-#### A. `test_fit_utilities.py` — small helper functions
+#### A. `test_fit_utilities.py` — small helper functions ✅
 
 **`get_index`**
 - Single scalar `value`, single-element `array` → returns `0`.
@@ -297,7 +297,7 @@ These are pure-logic functions with no GUI or mpdaf dependencies.  They are call
 - Circle (`rx=2`, `ry=None`): all returned pixels satisfy `row²+col² ≤ rx²`.
 - Ellipse (`rx=3, ry=1`): correct pixel count and all pixels satisfy the ellipse inequality.
 - Passing a two-element list `[rx, ry]` as the first argument gives the same result as passing `rx` and `ry` separately.
-- `rx=0` returns only the origin `[0, 0]`.
+- `rx=0` returns only the origin `[0, 0]`. ⚠️ **Bug found (§2.21):** actual behaviour is to return an empty array — marked `xfail(strict=True)`.
 
 **`get_reg_image`**
 - Output shape is `(max_row − min_row + 1, max_col − min_col + 1)`.
@@ -310,7 +310,7 @@ These are pure-logic functions with no GUI or mpdaf dependencies.  They are call
 - Known analytic case: `crval_out = crval_in * (1 + z_initial) / (1 + z)`.  Use a mock `WaveCoord`-like object with `get_crval`/`set_crval`/`get_step`/`set_step` to avoid an mpdaf dependency.
 - Return value is `z`.
 
-#### B. `test_aic.py` — AIC model-selection logic
+#### B. `test_aic.py` — AIC model-selection logic ✅
 
 **`get_aic`**
 - Returns `model.aic_real` when `model.success is True`.
@@ -326,11 +326,15 @@ These are pure-logic functions with no GUI or mpdaf dependencies.  They are call
 - Two-model list, both AICs `nan` → returns `-1`.
 - Three-model list: all four branches of the decision tree (2-better-than-1-and-3-better-than-2, 2-better-than-1-but-3-not, 3-better-than-1-skipping-2, none-better) each return the correct index.
 - Custom `d_aic` threshold is respected.
+- Exact boundary tie (`aic[1] - aic[0] == d_aic`): `<` is strict, so the simpler model always wins on a tie.
+- List of 4 models: `test_more_than_three_models_raises` is `xfail(strict=True)` — sees today's silent fallthrough; fix in §2.22.
+- Only the simpler model (index 0) has `NaN` AIC: `test_only_simpler_model_fails_returns_complex` is `xfail(strict=True)` — `NaN - valid = NaN < d_aic` is `False` in numpy, so the failed model 1 is returned instead of the only valid model 2; fix in §2.22.
 
 **`choose_model_aic`**
 - Single list (shape `(n_models,)`) delegates to `choose_model_aic_single` and returns a scalar.
 - 2D spatial array `(ny, nx, n_models)`: output shape is `(ny, nx)` and each element matches independent `choose_model_aic_single` calls.
 - Invalid spaxel (all-NaN AIC column) is assigned `-1` in the output array.
+- Custom `d_aic` is propagated to `choose_model_aic_single` through the spatial broadcast loop.
 
 **`get_ngaussians`**
 - Model with 0, 1, 2, 3 gaussian components returns the correct count.
@@ -340,6 +344,7 @@ These are pure-logic functions with no GUI or mpdaf dependencies.  They are call
 - Single gaussian → returns `[]`.
 - Two gaussians: ratio and delta-center are correct to floating-point tolerance.
 - The main component (highest flux) is excluded from the output list.
+- When the second gaussian has higher flux, it becomes the main and the first becomes the secondary (tests the `np.argmax` path in the other direction).
 
 **`marginal_fits`**
 - `None` model (un-fitted spaxel) → `False` (no user check needed).
@@ -347,37 +352,64 @@ These are pure-logic functions with no GUI or mpdaf dependencies.  They are call
 - Single-gaussian model → `False`.
 - Two-gaussian model where secondary flux ratio and delta-centre are below both thresholds → `True`.
 - Two-gaussian model where either condition is not met → `False`.
+- `choices=-1` (invalid spaxel): `np.choose(choices-1, fit_list, mode="clip")` clips `-2` to `0`, selecting `fit_list[0]`; in production `fit_list[0]` is `None` so the result is `False` via the `None`-path (documented in `test_choices_minus_one_not_flagged`).
+- Custom `flux` threshold: `flux=0.35` raises the flag boundary from default `0.25`.
+- Custom `dmu` threshold: `dmu=0.35` narrows the separation-flagging window from default `0.5`.
 
-#### C. `test_stats_collection.py` — result harvesting chain
+**Code-review bugs found, not yet fixed (fix tasks in §2.22):**
+- `choose_model_aic_single` with `len > 3` silently falls through to `return 1` — should raise `ValueError`. The docstring has a matching `TODO: generalize to more than 3`. (`test_more_than_three_models_raises`, `xfail strict`)
+- `choose_model_aic_single` when only `aic[0]` is `NaN` (simpler model failed): `aic[1] - aic[0] = NaN`, and `NaN < d_aic` is `False`, so the function returns model 1 (the failed one) instead of model 2 (the only successful one). (`test_only_simpler_model_fails_returns_complex`, `xfail strict`)
+
+#### C. `test_stats_collection.py` — result harvesting chain ✅
 
 **`get_model_keys`**
 - Single `ModelResult` → sorted list of parameter names, all present.
 - Array of `ModelResult` objects (some `None`) → uses the first non-None entry.
 - `ignore="fwhm height"` (string) → no returned key ends with any ignored suffix.
-- `ignore=["fwhm", "height"]` (list) → same.
-- All-`None` input → returns `[]`.
+- `ignore=["fwhm", "height"]` (list) → same result as the string form.
+- All-`None` numpy array → returns `[]`.
+- Scalar `None` → returns `[]`.
+- Returned list is always sorted alphabetically.
 
 **`get_header_stats`**
 - `fit_info="auto"` → first columns are `DEFAULT_FIT_INFO`, followed by `key` / `key_err` pairs.
-- `fit_info=None` → only `key` / `key_err` columns.
-- `model_keys=None` → only the `fit_info` columns, no crash.
-- Length of returned header is `len(fit_info) + 2 * len(model_keys)`.
+- `fit_info=None` → only `key` / `key_err` columns (no `DEFAULT_FIT_INFO` entries).
+- `model_keys=None` → only the `fit_info` columns, no crash; length equals `len(DEFAULT_FIT_INFO)`.
+- `fit_info=None, model_keys=None` → returns `[]`.
+- Length is `len(fit_info) + 2 * len(model_keys)` for all combinations.
+- Each `key` entry is immediately followed by `key_err`.
 
 **`collect_stats`**
-- Given a real `ModelResult` and matching `model_keys`, each `[value, stderr]` pair is present and finite.
-- Missing key (key present in header but not in result params) → two `empty_value` entries.
-- `model_result=None` (or not a `ModelResult`) → returns a list of `empty_value` with the correct length.
-- `get_header_stats` and `collect_stats` always return matching lengths for the same inputs.
+- Valid result + matching keys: each `[value, stderr]` pair is finite and matches `result.params[k]` directly.
+- `fit_info="auto"`: `result.aic_real` is the first element.
+- Missing key (not in `result.params`) → two `empty_value` entries.
+- `model_result=None`: returns `[empty_value] * (len(fit_info) + 2 * len(model_keys))`.
+- Custom `empty_value` (e.g. `-999.0`) is propagated correctly for `None` results.
+- `get_header_stats` and `collect_stats` return matching lengths for every combination of `model_keys` and `fit_info` (including both `None`).
 
 **`RecursiveArray`**
 - Attribute access on a flat list distributes over elements and returns a `RecursiveArray`.
-- Call distributes over elements that are callable (use simple lambdas or `mock`).
+- Call distributes over callable elements and returns a `RecursiveArray`.
 - `None` elements in a call are passed through as `None` rather than raising.
 - Nested (2D) construction wraps inner lists as `RecursiveArray` instances.
-- `aslist()` strips the wrapper and returns plain lists.
-- `array()` converts to a 1D `numpy.ndarray` with the correct `dtype`.
+- `aslist()` on a flat array returns a plain `list`; on a nested array returns a list of lists.
+- `array()` converts to a `numpy.ndarray` with the correct dtype; `dtype=bool` also works.
+- Missing attribute name (`getattr` default) returns `None` for each element.
 
-#### D. `test_lmfit_ext.py` — `lmfit_ext` extensions
+**Code-review bugs found, not yet fixed (fix task in §2.23):**
+- `RecursiveArray.__init__` accesses `self.data[0]` unconditionally — `IndexError` on empty list or `None` argument. (`test_empty_list_does_not_raise`, `xfail strict`)
+- `RecursiveArray.aslist()` has the **same `self.data[0]` access** — even after the `__init__` fix, calling `aslist()` on an empty instance still crashes. The fix must guard both methods. (`test_aslist_empty_list_does_not_raise`, `xfail strict`; test bypasses `__init__` by injecting `ra.data = []` directly to isolate the `aslist` bug independently.)
+
+**Additional gaps found during code review and added as tests:**
+- `get_model_keys` with a plain `lmfit.Model` (not yet fitted): exercises the `isinstance(model, lmfit.Model) → model.make_params()` source branch.
+- `get_model_keys` with a 2D spatial numpy array `(2, 3, 4)`: real production arrays are `(n_models, ny, nx)`; `.flat` handles it but was untested.
+- `get_header_stats` with a custom `fit_info` list (not `"auto"` or `None`): exercises the fall-through else branch.
+- `get_header_stats` custom `fit_info` does not mutate the caller's list (the `.copy()` guard).
+- `collect_stats` with a custom `fit_info` list.
+- `collect_stats` with an invalid `fit_info` attribute name: `AttributeError` mid-loop causes the `except` block to discard all previously-collected values and return all-`empty_value` — silent data loss documented as expected behavior.
+- `RecursiveArray.__call__` with a positional argument: `*args/**kwargs` forwarding was untested.
+
+#### D. `test_lmfit_ext.py` — `lmfit_ext` extensions ✅
 
 These require a real `ModelResult` from a trivial fit (single gaussian on synthetic data); use the fixture pattern already established in `test_model_function.py`.
 
@@ -407,6 +439,19 @@ These require a real `ModelResult` from a trivial fit (single gaussian on synthe
 **`summary_array`**
 - With `fit_info=["redchi"]` and `param_info=["g1_center", "g1_center_err"]`: returns a 3-element float array matching `[result.redchi, result.params["g1_center"].value, result.params["g1_center"].stderr]`.
 - With empty `fit_info` and `param_info`: returns a zero-length array.
+
+**Code-review bugs found, not yet fixed (fix tasks in §2.16 and §2.24):**
+- `set_param_hint_endswith` (registered as singular on `Model`, despite the function being named `set_param_hints_endswith`) unconditionally overwrites existing `min`/`max` hints — pre-set stricter bounds are silently replaced. (`test_preexisting_stricter_min_not_overwritten`, `xfail strict`; fix in §2.16)
+- `order_gauss` assumes `g{n}_height` parameters exist and calls `.value` on `self.get("g{n}_height")`, crashing with `AttributeError: 'NoneType' object has no attribute 'value'` when height parameters are absent (e.g. standard lmfit `GaussianModel` which uses `amplitude`). (`test_order_gauss_missing_height_param_does_not_crash`, `xfail strict`; fix in §2.24)
+
+**Additional gaps found during code review and added as tests:**
+- `aic_real` / `bic_real`: `bic > aic` verified for `ndata=120 > e²`.
+- `aic_real` / `bic_real`: `None + int → TypeError` path is caught (alongside `AttributeError`).
+- `set_param_hint_endswith`: multiple kwargs (`min` + `max`) are applied together.
+- `order_gauss`: 3-gaussian full reorder (g1=5020, g2=5000, g3=5010 → sorted ascending).
+- `order_gauss`: no-gaussian params (only `c`) — function returns immediately.
+- `summary_array`: missing `param_info` key → `d.get` returns `None` → `np.array(dtype=float)` → `NaN`.
+- `summary_array`: a misspelt `fit_info` attribute raises `AttributeError` (no silent `NaN` — asymmetric with `param_info` handling; documented as expected behaviour).
 
 ---
 
@@ -712,6 +757,147 @@ if (snr_image[idx] < snr_threshold) or np.isnan(snr_image[idx]):
 ```
 
 **Tests**: `tests/test_smoke_fit_lines.py::TestSingleSpaxelFit::test_snr_nan_skips_spaxel` is marked `xfail(strict=True)` and will turn green once this fix is applied.
+
+---
+
+### 2.21 — Fix `get_region(rx=0)` returning an empty array instead of `[[0, 0]]`
+
+Found during Phase 1.8A test implementation. In `fit.py`, `get_region` computes `rx2 = rx * rx` before the ellipse-inequality check:
+
+```python
+inside = (
+    indicies[:, 0] ** 2 / ry2 + indicies[:, 1] ** 2 / rx2 <= 1
+)
+```
+
+When `rx=0` (and therefore `ry=0` after the `ry = rx` default), both `rx2` and `ry2` are `0.0`. Dividing by zero yields `nan` for every pixel (including the origin, which would give `0/0`), and `nan <= 1` evaluates to `False` in numpy. All pixels are therefore excluded and an empty array is returned instead of `[[0, 0]]`.
+
+**Fix**: add an early-return special case before the division:
+```python
+if rx == 0:
+    return np.array([[0, 0]])
+```
+
+Apply this immediately after the `rx = abs(rx)` / `ry = abs(ry)` normalization lines so negative-zero inputs are also handled.
+
+**Test**: `tests/test_fit_utilities.py::TestGetRegion::test_rx_zero_returns_only_origin` is marked `xfail(strict=True)` and will turn green once this fix is applied.
+
+---
+
+### 2.22 — Fix `choose_model_aic_single` silent fallthrough and NaN-AIC bias
+
+Two bugs found during Phase 1.8B code review, both documented as `xfail(strict=True)` tests in `tests/test_aic.py`.
+
+**Bug A — silent fallthrough for `len > 3`**
+
+When `model_list` has more than 3 elements the function falls through all `if` branches and executes the comment-labelled "safest thing" `return 0+1`. The docstring has a matching `TODO: generalize to more than 3`. The silent return of `1` regardless of the AIC values is wrong and invisible to the caller.
+
+**Fix**: replace the trailing `return 0 + 1` with:
+```python
+raise ValueError(
+    f"choose_model_aic_single only supports up to 3 models, got {len(model_list)}."
+)
+```
+
+Once this is in place the `TODO` comment and `# safest thing to return is 0 i guess?` comment can both be removed. The docstring parameter description (`"Right now, the length must be no longer than 3"`) should be updated to `"The length must be no longer than 3"`.
+
+**Test**: `tests/test_aic.py::TestChooseModelAicSingle::test_more_than_three_models_raises` is `xfail(strict=True)` and will turn green once this fix is applied.
+
+**Bug B — NaN AIC bias when only the simpler model fails**
+
+When `aic[0]` is `NaN` (model 0 failed) and `aic[1]` is valid, `aic[1] - aic[0]` is `NaN`, and `NaN < d_aic` evaluates to `False` in numpy. The function therefore returns model 1 (the failed one) instead of model 2 (the only successful one). The same logic occurs in the 3-model branch whenever the model selected for comparison has a `NaN` AIC.
+
+**Fix**: after computing `aic = vget_aic(model_list, error=np.nan)` and the all-`NaN` check, add a valid-count guard. For the 2-model case a minimal fix is:
+```python
+if len(model_list) == 2:
+    valid = ~np.isnan(aic)
+    if valid.sum() == 1:
+        return int(np.where(valid)[0][0]) + 1
+    # ... existing comparison ...
+```
+A more general approach would loop over the models, filter `NaN` entries first, and then apply the sequential comparison logic. Either way the fix must also be applied to the 3-model branches.
+
+**Test**: `tests/test_aic.py::TestChooseModelAicSingle::test_only_simpler_model_fails_returns_complex` is `xfail(strict=True)` and will turn green once this fix is applied.
+
+---
+
+### 2.23 — Fix `RecursiveArray` crashes on empty data (`__init__` and `aslist`)
+
+Found during Phase 1.8C code review.
+
+**Two methods unconditionally access `self.data[0]`.**
+
+`RecursiveArray.__init__`:
+```python
+def __init__(self, array=None):
+    super().__init__(array)
+    if isinstance(self.data[0], (list, np.ndarray)):   # ← IndexError if array is []
+        self.data = [self.__class__(x) for x in self.data]
+```
+
+`RecursiveArray.aslist`:
+```python
+def aslist(self):
+    if isinstance(self.data[0], self.__class__):       # ← IndexError if data is []
+        return [x.aslist() for x in self.data]
+    else:
+        return self.data
+```
+
+When `array` is `[]` or `None` (both produce `self.data = []` via `UserList.__init__`), `self.data[0]` raises `IndexError`. The same crash cascades through `__getattr__` and `__call__`, which both construct new `RecursiveArray` instances from list comprehensions — an empty source array produces an empty comprehension result, which immediately fails again on construction. After fixing `__init__`, an empty `RecursiveArray` can exist, but `aslist()` will still crash without its own guard.
+
+**Fix**: add an early-return guard in both methods:
+
+```python
+def __init__(self, array=None):
+    super().__init__(array)
+    if not self.data:
+        return
+    if isinstance(self.data[0], (list, np.ndarray)):
+        self.data = [self.__class__(x) for x in self.data]
+
+def aslist(self):
+    if not self.data:
+        return []
+    if isinstance(self.data[0], self.__class__):
+        return [x.aslist() for x in self.data]
+    else:
+        return self.data
+```
+
+**Tests**:
+- `tests/test_stats_collection.py::TestRecursiveArray::test_empty_list_does_not_raise` is `xfail(strict=True)` — covers `__init__`.
+- `tests/test_stats_collection.py::TestRecursiveArray::test_aslist_empty_list_does_not_raise` is `xfail(strict=True)` — covers `aslist()`; bypasses `__init__` by injecting `ra.data = []` directly so it tests the `aslist()` guard independently.
+
+Both will turn green once this fix is applied.
+
+### 2.24 — Fix `order_gauss` crash when `g{n}_height` parameters are absent
+
+`lmfit_ext.order_gauss` reads heights via:
+```python
+heights = [self.get("g{}_height".format(i + 1)).value for i in range(ngauss)]
+```
+`Parameters.get(name)` returns `None` when the key is absent; calling `.value` on `None` raises `AttributeError: 'NoneType' object has no attribute 'value'`.
+
+This crashes silently for any model that names peak strength as `amplitude` rather than `height` (e.g. the stock lmfit `GaussianModel`).  In the threadcount model suite every gaussian component carries an expression-constrained `g{n}_height` parameter, so production usage is unaffected — but any user who calls `order_gauss` on params from a custom or standard-lmfit model will hit this.
+
+**Fix**: guard the `get` call and skip (or raise a user-friendly error) when `g{n}_height` is absent:
+```python
+h_param = self.get("g{}_height".format(i + 1))
+if h_param is None:
+    raise KeyError(
+        "order_gauss requires a 'g{n}_height' parameter for each gaussian "
+        "component; 'g{}_height' not found.".format(i + 1)
+    )
+heights.append(h_param.value)
+```
+
+Alternatively, if sorting by height is not needed, make center-only sorting the fallback when height params are absent.
+
+**Tests**:
+- `tests/test_lmfit_ext.py::TestOrderGauss::test_order_gauss_missing_height_param_does_not_crash` is `xfail(strict=True)` — currently raises `AttributeError`.
+
+Will turn green (xpass → pass) once the guard is added.
 
 ---
 
