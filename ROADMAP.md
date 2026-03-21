@@ -213,19 +213,26 @@ Use a plain `SimpleNamespace` for `s` — only needs `lmfit_kwargs`, `chop_bandw
 
 - **Missing test for SNR below threshold** — The happy-path test uses `snr_image = 999.0` everywhere. Added `test_snr_below_threshold_returns_none_list` that verifies `snr_image = 1.0 < threshold = 3` correctly returns `[None]` without fitting.
 
-#### 1.7c — `fit_line.run()` for a single line, no MC, no file I/O
+#### 1.7c — `fit_line.run()` for a single line, no MC, no file I/O ✅
 
 Build a settings `SimpleNamespace` that mirrors the `default_settings` fixture but sets `mc_n_iterations=0`, `save_plots=False`, and uses a 3×3 subregion of `synthetic_cube` (to keep runtime short).  Call `fit_line.run(s)` with `s.output_filename` pointing to `tmp_path`.
 
 Assert:
-- Returns without raising.
+- Returns without raising (verified via `hasattr(run_state, "model_results")`).
 - `s.model_results` has shape `(1, 3, 3)` (one model, 3×3 spatial).
-- At least one entry in `s.model_results[0]` is not `None`.
-- At least one non-`None` entry has `success=True`.
+- All 9 entries in `s.model_results[0]` are not `None` — the clean synthetic SNR is >> threshold, so every spaxel should be fitted.
+- All 9 non-`None` entries are `lmfit.model.ModelResult` instances.
+- All 9 entries have `success=True`.
 
 Does not assert file content — that is covered in 1.7d.
 
-#### 1.7d — Output files are created
+**Code-review gaps fixed after initial implementation:**
+
+- **`assert run_state is not None` was trivially true** — a `SimpleNamespace` returned by a pytest fixture can never be `None`. An erroring fixture shows as `ERROR`, not `FAIL`. Replaced with `assert hasattr(run_state, "model_results")`, which actually confirms `fit_line.run()` completed its main assignment.
+- **`any()` was weaker than the data warrants** — the synthetic cube injects a clean high-SNR signal in every spaxel, so all 9 should fit. Using `any()` would let a run where 8/9 spaxels silently returned `None` pass undetected. Changed to `all()` in both result assertions.
+- **No type check on fitted results** — added `test_all_results_are_model_result_instances` to assert every entry is `lmfit.model.ModelResult`. Without this, a non-result object deposited into `model_results` would pass the shape and `all(...)` checks.
+
+#### 1.7d — Output files are created ✅
 
 Using the same setup as 1.7c (but with the full 10×10 `synthetic_cube` and `mc_n_iterations=0`), assert that after `fit_line.run(s)` all three expected `.txt` files exist in `tmp_path`:
 
@@ -233,18 +240,37 @@ Using the same setup as 1.7c (but with the full 10×10 `synthetic_cube` and `mc_
 - `{output_filename}_5007_best_fit.txt` — only when `len(models) > 1` (test both cases: single model and two models).
 - `{output_filename}_5007_mc_best_fit.txt`
 
-Also assert each file is non-empty (file size > 0 bytes).
+Also assert each file contains at least one non-comment, non-blank data row (stronger than a byte-count check, which would pass a header-only file).
 
-#### 1.7e — `ResultDict.loadtxt` round-trip
+**Code-review gaps fixed after initial implementation:**
+
+- **`_LINE_SAVE_STR` was a magic string** — the constant `"5007"` was not tied to `tc.lines.L_OIII5007.save_str`. A failing run would produce a confusing `FileNotFoundError` rather than a clear assertion failure. Added a module-level `assert tc.lines.L_OIII5007.save_str == _LINE_SAVE_STR` guard that fails immediately with an explanatory message if the `save_str` ever changes.
+- **`_make_run_settings` `_i` was hardcoded to 0** — added `_i=0` as an explicit parameter. A runtime `assert s._i < len(s.lines) and s._i < len(s.models)` fires immediately if a caller passes an out-of-range index, with a message directing them to extend the lines/models lists or use a dedicated fixture.
+- **File "non-empty" check was `stat().st_size > 0`** — `ResultDict.savetxt` writes comment lines (starting with `#`) before any data. A file consisting entirely of comment lines would pass the size check but contain no usable data. Replaced all six `_nonempty_` tests with `_assert_has_data_rows()`, which strips comment/blank lines and asserts at least one data row remains.
+- **`baseline_subtract=None` mutation risk** — if `baseline_subtract` were set to a non-None value, `fit_line.run` would subtract in-place from a subcube that is a *view* into the session-scoped `synthetic_cube`, silently corrupting shared test state. Added `baseline_subtract=None` as an explicit parameter with a runtime `assert baseline_subtract is None` guard; the error message directs future callers to pass `synthetic_cube.copy()` directly instead.
+
+#### 1.7e — `ResultDict.loadtxt` round-trip ✅
 
 After the 1.7d run, load each `.txt` file with `ResultDict.loadtxt` and assert:
 
 - The returned object is a `ResultDict` (i.e. an `OrderedDict` subclass).
 - `"row"` and `"col"` keys are present.
 - The spatial shape inferred from `max(result["row"]) + 1` and `max(result["col"]) + 1` matches `(CUBE_NY, CUBE_NX)` = `(10, 10)`.
-- At least one row of data contains finite (non-NaN) values for `"g1_center"`.
+- All spaxels on a clean SNR=25 cube produce finite `g1_center` values (`np.all`, not `np.any`).
+- All finite `g1_center` values are within 0.5 Å of the injected line centre (end-to-end physical correctness check).
+- `.comment` is reconstructed as a `str` by `loadtxt`.
 
-This is the end-to-end assertion that the full write→read cycle for the most important output file is intact.
+Both `simple_model.txt` and `mc_best_fit.txt` are checked. `best_fit.txt` is implicitly covered by the single-model fixture (only two files are written) — a dedicated two-model round-trip is deferred to 1.8 (covered as part of the row-count assertion in §1.7d item 5).
+
+`mc_best_fit.txt` uses `avg_`-prefixed column names (e.g. `avg_g1_center`, not `g1_center`) because `extract_spaxel_info_mc` mediates storage. The mc assertions check the `avg_g1_center` key, finite-values, and proximity to the injected line centre. Since `mc_n_iterations=0`, `mc_iter(0)` returns `[self]` (the original fit only), so the median equals the direct fit value.
+
+**Code-review findings applied after initial implementation:**
+
+1. **Docstring corrected** — class docstring mistakenly claimed the fit ran only once; pytest does not share class-scoped fixtures across classes, so it runs a second time.
+2. `np.any` → `np.all` for the finite-values assertion (same issue as 1.7c: `np.any` only catches total collapse).
+3. **Vacuous-truth guard** — added `assert finite.size > 0` before the `np.all(abs(...) < 0.5)` proximity check; without it an all-NaN failure passes silently.
+4. **`mc_result` semantic tests** — none existed; added key-presence (`avg_g1_center`), finite-values, and proximity-to-line checks.
+5. **`.comment` tests** — `loadtxt` reconstructs the attribute; added `test_simple_model_comment_is_str` and `test_mc_result_comment_is_str`.
 
 ---
 

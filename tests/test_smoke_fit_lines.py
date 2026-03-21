@@ -3,6 +3,7 @@
 import copy
 from types import SimpleNamespace
 
+import lmfit
 import numpy as np
 import pytest
 
@@ -240,3 +241,410 @@ class TestSingleSpaxelFit:
             idx=(5, 5),
         )
         assert result == [None]
+
+
+# ---------------------------------------------------------------------------
+# 1.7c — fit_line.run() for a single line, no MC, no file I/O assertions
+# ---------------------------------------------------------------------------
+
+_SUBREGION_SLICE = (slice(None), slice(4, 7), slice(4, 7))  # 3×3 centre region
+
+
+class TestFitLineRun3x3:
+    """1.7c — call fit_line.run() on a 3×3 subregion with mc_n_iterations=0.
+
+    Does NOT assert file content — that is covered by 1.7d.
+    """
+
+    @pytest.fixture(scope="class")
+    def run_state(self, synthetic_cube, tmp_path_factory):
+        """Build settings, run fit_line.run(), and return the mutated settings object.
+
+        The fixture is class-scoped so the (slow) fitting step runs only once
+        for all assertions in this class.
+        """
+        tmp_path = tmp_path_factory.mktemp("fit_line_3x3")
+        s = SimpleNamespace(
+            setup_parameters=False,
+            monitor_pixels=[],
+            baseline_subtract=None,
+            baseline_fit_range=None,
+            output_filename=str(tmp_path / "output"),
+            save_plots=False,
+            region_averaging_radius=1.5,
+            instrument_dispersion=0.8,
+            lmfit_kwargs={"method": "least_squares"},
+            snr_lower_limit=3,
+            lines=[tc.lines.L_OIII5007],
+            models=[[tc.models.Const_1GaussModel()]],
+            d_aic=-150,
+            interactively_choose_fits=False,
+            always_manually_choose=[],
+            mc_snr=25,
+            mc_n_iterations=0,
+            parallel=False,
+            n_process=4,
+            chop_bandwidth=False,
+            SNR_HalfBW=9,
+            SNR_Baseline_q=0.15,
+            # Spatial subregion: centre 3×3 of the synthetic cube
+            cube=synthetic_cube[_SUBREGION_SLICE],
+            continuum_cube=None,
+            z_set=0,
+            comment="",
+            _i=0,
+        )
+        fit_lines.update_settings(s)
+        fit_line.run(s)
+        return s
+
+    # ------------------------------------------------------------------
+    # Assertions
+    # ------------------------------------------------------------------
+
+    def test_run_does_not_raise(self, run_state):
+        """fit_line.run() must set model_results — proves it ran to completion."""
+        assert hasattr(run_state, "model_results")
+
+    def test_model_results_shape(self, run_state):
+        """model_results must be shaped (n_models, ny, nx) = (1, 3, 3)."""
+        assert run_state.model_results.shape == (1, 3, 3)
+
+    def test_all_results_not_none(self, run_state):
+        """Every spaxel must have been fitted — the synthetic SNR is >> threshold."""
+        assert all(
+            run_state.model_results[0, y, x] is not None
+            for y in range(3)
+            for x in range(3)
+        )
+
+    def test_all_results_are_model_result_instances(self, run_state):
+        """Every fitted entry must be an lmfit ModelResult, not some other object."""
+        assert all(
+            isinstance(run_state.model_results[0, y, x], lmfit.model.ModelResult)
+            for y in range(3)
+            for x in range(3)
+        )
+
+    def test_all_results_success(self, run_state):
+        """Every fitted spaxel must report success=True — clean synthetic data."""
+        assert all(
+            run_state.model_results[0, y, x].success for y in range(3) for x in range(3)
+        )
+
+
+# ---------------------------------------------------------------------------
+# 1.7d — Output files are created and non-empty
+# ---------------------------------------------------------------------------
+
+_LINE_SAVE_STR = "5007"  # str(round(L_OIII5007.center)) — used in output filenames
+
+# Sanity-check: if L_OIII5007's save_str ever changes, the file-name assertions
+# below will give a confusing "FileNotFoundError" rather than a clear failure.
+assert tc.lines.L_OIII5007.save_str == _LINE_SAVE_STR, (
+    f"L_OIII5007.save_str changed to {tc.lines.L_OIII5007.save_str!r}; "
+    f"update _LINE_SAVE_STR to match"
+)
+
+
+def _assert_has_data_rows(path):
+    """Assert *path* contains at least one non-comment, non-blank line.
+
+    ``ResultDict.savetxt`` writes comment lines starting with ``#`` before any
+    data.  A file that is non-zero bytes but consists *only* of comment lines
+    (e.g. when every spaxel returned None) would pass a simple size check yet
+    contain no usable data.
+    """
+    data_lines = [
+        line
+        for line in path.read_text().splitlines()
+        if line and not line.startswith("#")
+    ]
+    assert len(data_lines) > 0, f"{path.name} contains no data rows (only comments)"
+
+
+def _make_run_settings(
+    synthetic_cube, tmp_path, models_list, _i=0, baseline_subtract=None
+):
+    """Build and return a settings SimpleNamespace ready for fit_line.run().
+
+    Parameters
+    ----------
+    models_list : list of lmfit.Model
+        The list of models to fit (one entry → no best_fit file written).
+    _i : int, optional
+        Index into ``s.lines`` / ``s.models`` that ``fit_line.run`` will
+        process.  Defaults to 0.  Must be 0 for a single-line setup.
+    baseline_subtract : None
+        Must remain None for any test relying on the session-scoped
+        ``synthetic_cube``.  If non-None, ``fit_line.run`` would call
+        ``tc.fit.remove_baseline``, which subtracts in-place from a subcube
+        that is a *view* into ``synthetic_cube``, corrupting shared test state.
+        Any test that needs baseline subtraction must pass a private
+        ``synthetic_cube.copy()`` directly rather than going through this helper.
+    """
+    assert baseline_subtract is None, (
+        "_make_run_settings shares the session-scoped synthetic_cube. "
+        "baseline_subtract != None would mutate it via a select_lambda view. "
+        "Create a dedicated test that passes synthetic_cube.copy() directly."
+    )
+    s = SimpleNamespace(
+        setup_parameters=False,
+        monitor_pixels=[],
+        baseline_subtract=None,
+        baseline_fit_range=None,
+        output_filename=str(tmp_path / "output"),
+        save_plots=False,
+        region_averaging_radius=1.5,
+        instrument_dispersion=0.8,
+        lmfit_kwargs={"method": "least_squares"},
+        snr_lower_limit=3,
+        lines=[tc.lines.L_OIII5007],
+        models=[models_list],
+        d_aic=-150,
+        interactively_choose_fits=False,
+        always_manually_choose=[],
+        mc_snr=25,
+        mc_n_iterations=0,
+        parallel=False,
+        n_process=4,
+        chop_bandwidth=False,
+        SNR_HalfBW=9,
+        SNR_Baseline_q=0.15,
+        cube=synthetic_cube,
+        continuum_cube=None,
+        z_set=0,
+        comment="",
+        _i=_i,
+    )
+    assert s._i < len(s.lines) and s._i < len(s.models), (
+        f"_i={s._i} is out of range for lines (len={len(s.lines)}) "
+        f"and models (len={len(s.models)}). "
+        "Add additional lines/models to the helper call, or use a dedicated fixture."
+    )
+    fit_lines.update_settings(s)
+    return s
+
+
+class TestFitLineRunOutputFiles:
+    """1.7d — assert the expected output .txt files are created and non-empty.
+
+    Two sub-cases:
+    - Single model: only simple_model.txt and mc_best_fit.txt are written.
+    - Two models: all three files (simple_model, best_fit, mc_best_fit) are written.
+    """
+
+    # ------------------------------------------------------------------
+    # Single-model run
+    # ------------------------------------------------------------------
+
+    @pytest.fixture(scope="class")
+    def single_model_run(self, synthetic_cube, tmp_path_factory):
+        tmp_path = tmp_path_factory.mktemp("output_single")
+        s = _make_run_settings(
+            synthetic_cube, tmp_path, [tc.models.Const_1GaussModel()]
+        )
+        fit_line.run(s)
+        return s, tmp_path
+
+    def test_simple_model_file_exists_single(self, single_model_run):
+        s, tmp_path = single_model_run
+        expected = tmp_path / f"output_{_LINE_SAVE_STR}_simple_model.txt"
+        assert expected.exists()
+
+    def test_simple_model_file_has_data_rows_single(self, single_model_run):
+        s, tmp_path = single_model_run
+        expected = tmp_path / f"output_{_LINE_SAVE_STR}_simple_model.txt"
+        _assert_has_data_rows(expected)
+
+    def test_mc_best_fit_file_exists_single(self, single_model_run):
+        s, tmp_path = single_model_run
+        expected = tmp_path / f"output_{_LINE_SAVE_STR}_mc_best_fit.txt"
+        assert expected.exists()
+
+    def test_mc_best_fit_file_has_data_rows_single(self, single_model_run):
+        s, tmp_path = single_model_run
+        expected = tmp_path / f"output_{_LINE_SAVE_STR}_mc_best_fit.txt"
+        _assert_has_data_rows(expected)
+
+    def test_best_fit_file_absent_single(self, single_model_run):
+        """best_fit.txt must NOT be written when there is only one model."""
+        s, tmp_path = single_model_run
+        absent = tmp_path / f"output_{_LINE_SAVE_STR}_best_fit.txt"
+        assert not absent.exists()
+
+    # ------------------------------------------------------------------
+    # Two-model run
+    # ------------------------------------------------------------------
+
+    @pytest.fixture(scope="class")
+    def two_model_run(self, synthetic_cube, tmp_path_factory):
+        tmp_path = tmp_path_factory.mktemp("output_two")
+        s = _make_run_settings(
+            synthetic_cube,
+            tmp_path,
+            [tc.models.Const_1GaussModel(), tc.models.Const_2GaussModel()],
+        )
+        fit_line.run(s)
+        return s, tmp_path
+
+    def test_simple_model_file_exists_two(self, two_model_run):
+        s, tmp_path = two_model_run
+        expected = tmp_path / f"output_{_LINE_SAVE_STR}_simple_model.txt"
+        assert expected.exists()
+
+    def test_simple_model_file_has_data_rows_two(self, two_model_run):
+        s, tmp_path = two_model_run
+        expected = tmp_path / f"output_{_LINE_SAVE_STR}_simple_model.txt"
+        _assert_has_data_rows(expected)
+
+    def test_best_fit_file_exists_two(self, two_model_run):
+        """best_fit.txt must be written when there are multiple models."""
+        s, tmp_path = two_model_run
+        expected = tmp_path / f"output_{_LINE_SAVE_STR}_best_fit.txt"
+        assert expected.exists()
+
+    def test_best_fit_file_has_data_rows_two(self, two_model_run):
+        s, tmp_path = two_model_run
+        expected = tmp_path / f"output_{_LINE_SAVE_STR}_best_fit.txt"
+        _assert_has_data_rows(expected)
+
+    def test_mc_best_fit_file_exists_two(self, two_model_run):
+        s, tmp_path = two_model_run
+        expected = tmp_path / f"output_{_LINE_SAVE_STR}_mc_best_fit.txt"
+        assert expected.exists()
+
+    def test_mc_best_fit_file_has_data_rows_two(self, two_model_run):
+        s, tmp_path = two_model_run
+        expected = tmp_path / f"output_{_LINE_SAVE_STR}_mc_best_fit.txt"
+        _assert_has_data_rows(expected)
+
+
+# ---------------------------------------------------------------------------
+# 1.7e — ResultDict.loadtxt round-trip
+# ---------------------------------------------------------------------------
+
+
+class TestResultDictRoundTrip:
+    """1.7e — load the files written by 1.7d and assert the round-trip is intact.
+
+    The ``single_model_run`` fixture is duplicated from TestFitLineRunOutputFiles
+    because pytest does not share class-scoped fixtures across classes; the fit
+    therefore runs a second time here.  The two files checked (simple_model and
+    mc_best_fit) cover the single-model code path; the full-pipeline path is
+    exercised in 1.7d.
+    """
+
+    # ------------------------------------------------------------------
+    # Fixture — borrow the already-run single-model output directory
+    # ------------------------------------------------------------------
+
+    @pytest.fixture(scope="class")
+    def single_model_run(self, synthetic_cube, tmp_path_factory):
+        """Duplicate of TestFitLineRunOutputFiles.single_model_run.
+
+        pytest class-scoped fixtures are not shared across classes, so this
+        fixture is repeated here.  The class-scope ensures fit_line.run()
+        executes only once for all assertions in this class.
+        """
+        tmp_path = tmp_path_factory.mktemp("roundtrip_single")
+        s = _make_run_settings(
+            synthetic_cube, tmp_path, [tc.models.Const_1GaussModel()]
+        )
+        fit_line.run(s)
+        return s, tmp_path
+
+    @pytest.fixture(scope="class")
+    def simple_model_result(self, single_model_run):
+        """Load simple_model.txt with ResultDict.loadtxt."""
+        s, tmp_path = single_model_run
+        fname = str(tmp_path / f"output_{_LINE_SAVE_STR}_simple_model.txt")
+        return tc.fit.ResultDict.loadtxt(fname)
+
+    @pytest.fixture(scope="class")
+    def mc_result(self, single_model_run):
+        """Load mc_best_fit.txt with ResultDict.loadtxt."""
+        s, tmp_path = single_model_run
+        fname = str(tmp_path / f"output_{_LINE_SAVE_STR}_mc_best_fit.txt")
+        return tc.fit.ResultDict.loadtxt(fname)
+
+    # ------------------------------------------------------------------
+    # simple_model.txt assertions
+    # ------------------------------------------------------------------
+
+    def test_simple_model_is_result_dict(self, simple_model_result):
+        """Loaded object must be a ResultDict (OrderedDict subclass)."""
+        from collections import OrderedDict
+
+        assert isinstance(simple_model_result, tc.fit.ResultDict)
+        assert isinstance(simple_model_result, OrderedDict)
+
+    def test_simple_model_has_row_key(self, simple_model_result):
+        assert "row" in simple_model_result
+
+    def test_simple_model_has_col_key(self, simple_model_result):
+        assert "col" in simple_model_result
+
+    def test_simple_model_spatial_shape(self, simple_model_result):
+        """Inferred spatial shape must match the full 10×10 synthetic cube."""
+        ny = int(simple_model_result["row"].max()) + 1
+        nx = int(simple_model_result["col"].max()) + 1
+        assert (ny, nx) == (_CUBE_NY, _CUBE_NX)
+
+    def test_simple_model_has_g1_center(self, simple_model_result):
+        assert "g1_center" in simple_model_result
+
+    def test_simple_model_g1_center_has_finite_values(self, simple_model_result):
+        """All spaxels on a clean SNR=25 cube must produce a finite g1_center."""
+        assert np.all(np.isfinite(simple_model_result["g1_center"]))
+
+    def test_simple_model_g1_center_near_line(self, simple_model_result):
+        """All finite g1_center values must lie within 0.5 Å of the injected center."""
+        centers = simple_model_result["g1_center"]
+        finite = centers[np.isfinite(centers)]
+        assert finite.size > 0, "no finite g1_center values — all fits failed"
+        assert np.all(np.abs(finite - _LINE_CENTER) < 0.5)
+
+    def test_simple_model_comment_is_str(self, simple_model_result):
+        """loadtxt must reconstruct the .comment attribute as a string."""
+        assert isinstance(simple_model_result.comment, str)
+
+    # ------------------------------------------------------------------
+    # mc_best_fit.txt assertions
+    # ------------------------------------------------------------------
+
+    def test_mc_result_is_result_dict(self, mc_result):
+        from collections import OrderedDict
+
+        assert isinstance(mc_result, tc.fit.ResultDict)
+        assert isinstance(mc_result, OrderedDict)
+
+    def test_mc_result_has_row_key(self, mc_result):
+        assert "row" in mc_result
+
+    def test_mc_result_has_col_key(self, mc_result):
+        assert "col" in mc_result
+
+    def test_mc_result_spatial_shape(self, mc_result):
+        ny = int(mc_result["row"].max()) + 1
+        nx = int(mc_result["col"].max()) + 1
+        assert (ny, nx) == (_CUBE_NY, _CUBE_NX)
+
+    def test_mc_result_has_avg_g1_center(self, mc_result):
+        """mc_best_fit uses 'avg_' prefix; the key must be 'avg_g1_center'."""
+        assert "avg_g1_center" in mc_result
+
+    def test_mc_result_avg_g1_center_finite(self, mc_result):
+        """mc_iter(0) returns [original_fit], so every spaxel should be finite."""
+        assert np.all(np.isfinite(mc_result["avg_g1_center"]))
+
+    def test_mc_result_avg_g1_center_near_line(self, mc_result):
+        """All avg_g1_center values must lie within 0.5 Å of the injected center."""
+        centers = mc_result["avg_g1_center"]
+        finite = centers[np.isfinite(centers)]
+        assert finite.size > 0, "no finite avg_g1_center values — all mc fits failed"
+        assert np.all(np.abs(finite - _LINE_CENTER) < 0.5)
+
+    def test_mc_result_comment_is_str(self, mc_result):
+        """loadtxt must reconstruct the .comment attribute as a string."""
+        assert isinstance(mc_result.comment, str)
