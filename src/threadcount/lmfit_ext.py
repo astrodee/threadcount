@@ -1,7 +1,64 @@
 """Functions to extend classes Model, ModelResult, Parameters from package lmfit."""
+
 from copy import copy
+
 import lmfit
 import numpy as np
+from lmfit.parameter import tiny as _lmfit_tiny
+from numba import njit
+from numpy import arcsin, inf, sin, sqrt
+
+# ---------------------------------------------------------------------------
+# Numba-JIT'd bound-transform kernels (replicate the fork's performance patch).
+# These are called by the monkey-patched Parameter.setup_bounds below.
+# ---------------------------------------------------------------------------
+
+
+@njit
+def _from_internal_lower_bound(min_val, val):
+    return min_val - 1.0 + sqrt(val * val + 1)
+
+
+@njit
+def _from_internal_upper_bound(max_val, val):
+    return max_val + 1 - sqrt(val * val + 1)
+
+
+@njit
+def _from_internal_bound2(min_val, max_val, val):
+    return min_val + (sin(val) + 1) * (max_val - min_val) / 2.0
+
+
+def _numba_setup_bounds(self):
+    """setup_bounds with numba-JIT'd inner kernels for performance.
+
+    Drop-in replacement for lmfit.parameter.Parameter.setup_bounds.
+    Logic is identical to the upstream method; only the three lambda
+    assignments call @njit functions instead of doing the math inline,
+    so the hot bound-transform path is JIT-compiled.
+    """
+    if self.min is None:
+        self.min = -inf
+    if self.max is None:
+        self.max = inf
+    if self.min == -inf and self.max == inf:
+        self.from_internal = lambda val: float(val)
+        _val = self._val
+    elif self.max == inf:
+        _min = self.min
+        self.from_internal = lambda val: _from_internal_lower_bound(_min, val)
+        _val = sqrt((self._val - self.min + 1.0) ** 2 - 1)
+    elif self.min == -inf:
+        _max = self.max
+        self.from_internal = lambda val: _from_internal_upper_bound(_max, val)
+        _val = sqrt((self.max - self._val + 1.0) ** 2 - 1)
+    else:
+        _min, _max = self.min, self.max
+        self.from_internal = lambda val: _from_internal_bound2(_min, _max, val)
+        _val = arcsin(2 * (self._val - self.min) / (self.max - self.min) - 1)
+    if abs(_val) < _lmfit_tiny:
+        _val = 0.0
+    return float(_val)
 
 
 def plot2(
@@ -98,8 +155,8 @@ def plot2(
     If `fig` is None then `matplotlib.pyplot.figure(**fig_kws)` is
     called, otherwise `fig_kws` is ignored.
     """
-    from matplotlib import pyplot as plt
     import matplotlib as mpl
+    from matplotlib import pyplot as plt
 
     if data_kws is None:
         data_kws = {}
@@ -119,7 +176,10 @@ def plot2(
         fig_kws_.update(fig_kws)
 
     if len(self.model.independent_vars) != 1:
-        print("Fit can only be plotted if the model function has one " "independent variable.")
+        print(
+            "Fit can only be plotted if the model function has one "
+            "independent variable."
+        )
         return False
 
     if not isinstance(fig, (plt.Figure, mpl.figure.SubFigure)):
@@ -248,7 +308,13 @@ def set_param_hints_endswith(self, name, **kwargs):
     names = self.param_names
     for this_name in names:
         if this_name.endswith(name):
-            self.set_param_hint(this_name, **kwargs)
+            merged = dict(kwargs)
+            existing = self.param_hints.get(this_name, {})
+            if "min" in merged and "min" in existing:
+                merged["min"] = max(merged["min"], existing["min"])
+            if "max" in merged and "max" in existing:
+                merged["max"] = min(merged["max"], existing["max"])
+            self.set_param_hint(this_name, **merged)
 
 
 def mc_iter(self, n_mc_iterations=0, distribution="normal"):
@@ -305,7 +371,9 @@ def mc_iter(self, n_mc_iterations=0, distribution="normal"):
     else:
         raise NotImplementedError("distribution " + distribution + " not implemented.")
     # use the above definitions to calculate the monte carlo iterations.
-    mc_data = distribution_fcn(input1, input2, (n_mc_iterations, np.broadcast(input1, input2).size))
+    mc_data = distribution_fcn(
+        input1, input2, (n_mc_iterations, np.broadcast(input1, input2).size)
+    )
     mc_fits = [self]
     for mcd in mc_data:
         modelresult = copy(self)
@@ -408,5 +476,11 @@ def extend_lmfit(lmfit):
     lmfit.parameter.Parameters.valerrsdict = valerrsdict
     lmfit.parameter.Parameters.order_gauss = order_gauss
 
+    lmfit.parameter.Parameter.setup_bounds = _numba_setup_bounds
+
+
+# Save the original lmfit setup_bounds *before* extend_lmfit replaces it so
+# that tests can compare our patch against the real lmfit on identical inputs.
+_original_setup_bounds = lmfit.parameter.Parameter.setup_bounds
 
 extend_lmfit(lmfit)

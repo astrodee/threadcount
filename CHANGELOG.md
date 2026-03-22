@@ -1,6 +1,26 @@
 Changelog
 =========
 
+0.2.0 (22/03/2026)
+-------------------
+
+### Packaging / requirements:
+* Minimum Python version raised from 3.6 to 3.10. Python 3.10, 3.11, 3.12, and 3.13 are now declared as supported classifiers.
+* NumPy upper-cap `<2` removed. NumPy 2.x is now supported; minimum version raised from 1.17.0 to 1.24.
+* Project URLs corrected to current repository location.
+
+### Bug fixes:
+* `set_param_hints_endswith` in `lmfit_ext` unconditionally overwrote existing parameter `min`/`max` hints, silently loosening user-set tighter bounds. Now merges conservatively: takes `max(existing_min, new_min)` and `min(existing_max, new_max)`.
+* `ResultDict.loadtxt` crashed with `IndexError` on single-spaxel (1×1 spatial grid) files because `numpy.loadtxt` returns a 1D array for single-row files. Promoted to 2D immediately after loading.
+* `ResultDict.loadtxt` crashed with `TypeError: need sequence of keys with len > 0` when loading files saved with `generate_pixel_coordinates=False`, because `numpy.lexsort(())` was called unconditionally before the empty-indices guard. The sort is now skipped when no dimension columns are present.
+* `process_single_spectrum` in `fit_line` did not skip spaxels whose SNR is `NaN`. The guard used `np.isnan(...) is True` (identity comparison against the Python `True` singleton), which always evaluates to `False` for `numpy.bool_` values. Replaced with a plain truthiness check.
+* `process_single_spectrum` in `fit_line` raised `AttributeError` when the chop-bandwidth retry path received `None` from `lmfit` (fully-masked chopped spectrum). The `None` guard present on the first fit call was missing on the retry. Guard added.
+* `create_outflow_mask` in `analyze_outflow_extent` raised `UnboundLocalError` instead of a descriptive error when `which_contour` was not found in `contour_levels`. Replaced the `for/break` search with `list.index()` wrapped in a `try/except` that raises a clear `ValueError`.
+* `get_region(0)` triggered a division-by-zero: both `rx2` and `ry2` were `0`, making the inside-ellipse check produce `nan`, which evaluates to `False`, so all pixels were excluded and an empty array was returned instead of `[[0, 0]]`. Added a special-case guard before the ellipse computation.
+* `RecursiveArray.__init__` and `aslist()` accessed `self.data[0]` unconditionally, raising `IndexError` on empty input. Added early-return guards for the empty-list case in both methods.
+* `get_param_values` branch 3 (extracting a `ModelResult` attribute such as `redchi` or `chisqr`) was unreachable because it relied on `ModelResult.get()`, which does not exist in `lmfit`. Replaced `params.get(param_name, default_value)` with `getattr(params, param_name, default_value)`.
+
+
 0.1.18 (22/08/2025)
 -------------------
 

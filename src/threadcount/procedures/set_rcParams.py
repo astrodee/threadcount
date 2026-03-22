@@ -1,4 +1,5 @@
 """Interface to set and reset some common matplotlib rcParams."""
+
 import matplotlib as mpl
 
 default_rcParams = {

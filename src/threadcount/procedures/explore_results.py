@@ -1,8 +1,9 @@
-import numpy as np
 import matplotlib
-import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.colors import LogNorm
+
 import threadcount as tc
 
 
@@ -128,7 +129,7 @@ def click_func(event, ax1, ax2, input_data, s, scube, nr_gauss, mc):
     # defines what happens when you click on a spaxel
     try:  # use try/except in case we are not using Qt backend
         zooming_panning = (
-            fig.canvas.cursor().shape() != 0
+            event.canvas.cursor().shape() != 0
         )  # 0 is the arrow, which means we are not zooming or panning.
     except:
         zooming_panning = False
@@ -214,7 +215,6 @@ def plot_spec(ax2, input_data, scube, p, q, nr_gauss, mc, line, z_set):
         const = input_data["avg_c"][b, a]
         snr = input_data["snr"][b, a]
         for i in range(nr_gauss):
-
             sigma_i = input_data["avg_g%i_sigma" % (i + 1)][b, a]
             center_i = input_data["avg_g%i_center" % (i + 1)][b, a]
             height_i = input_data["avg_g%i_height" % (i + 1)][b, a]

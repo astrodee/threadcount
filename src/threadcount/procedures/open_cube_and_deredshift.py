@@ -1,4 +1,5 @@
 """Open a fits data cube and de-redshift it along with any continuum cube."""
+
 import threadcount as tc
 
 # import matplotlib as mpl
@@ -73,7 +74,11 @@ def run(user_settings):
 
     # %%
     cube = tc.fit.open_fits_cube(
-        s.data_filename, s.data_hdu_index, s.var_filename, s.var_hdu_index, s.mask_spaxel_if_this_many_nans
+        s.data_filename,
+        s.data_hdu_index,
+        s.var_filename,
+        s.var_hdu_index,
+        s.mask_spaxel_if_this_many_nans,
     )
     if s.continuum_filename not in ("", None):
         continuum_cube = tc.fit.open_fits_cube(s.continuum_filename)

@@ -1,8 +1,10 @@
-import numpy as np
-import threadcount as tc
-from itertools import tee
 import multiprocessing as mp
 from functools import partial
+from itertools import tee
+
+import numpy as np
+
+import threadcount as tc
 
 mpException = None
 try:
@@ -187,7 +189,7 @@ def process_single_spectrum(subcube_av, snr_image, snr_threshold, models, s, idx
     # this below line is how I originally tried this, and it works.
     # for sp, idx in mpdaf.obj.iter_spe(subcube_av, index=True):
     # Test if it passes the SNR test:
-    if (snr_image[idx] < snr_threshold) or (np.isnan(snr_image[idx]) is True):
+    if (snr_image[idx] < snr_threshold) or np.isnan(snr_image[idx]):
         # fit_results_T[idx] = [None] * len(models)
         return [None]
 
@@ -209,6 +211,8 @@ def process_single_spectrum(subcube_av, snr_image, snr_threshold, models, s, idx
         cut_sp = sp.subspec(wave_range[0] + 5, wave_range[1] - 5)
         spec_to_fit = cut_sp
         f = spec_to_fit.lmfit(models[0], **s.lmfit_kwargs)
+        if f is None:
+            return [None]
         if f.success is False:
             # fit_results_T[idx] = [None] * len(models)
             return [None]

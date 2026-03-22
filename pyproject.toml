@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 name = "threadcount"
 description = "Astronomy data cube spectral line fitting"
 readme = "README.md"
-requires-python = ">=3.6"
+requires-python = ">= 3.10"
 license = {file = "LICENSE"}
 authors = [
     {name = "FisherAstronomy", email = "dfisher@swin.edu.au"}
@@ -17,14 +17,18 @@ authors = [
 keywords = ["astronomy", "data", "cube", "spectral", "line", "fitting"]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent"
 ]
 dependencies = [
-    "lmfit @ git+https://github.com/sebusch/light-lmfit-py.git@light_dev#egg=lmfit",
+    "lmfit >= 1.3.4",
     "matplotlib >= 3.4.3",
     "mpdaf >= 3.5",
-    "numpy >= 1.17.0,<2",
+    "numpy >= 1.24",
     "astropy >= 3.2.1",
     "numdifftools",
     "numba",
@@ -38,8 +42,65 @@ dynamic = ["version"]
 
 [project.urls]
 homepage = "https://threadcount.readthedocs.io"
-source = "https://github.com/FisherAstronomy/threadcount"
-issues = "https://github.com/FisherAstronomy/threadcount/issues"
+source = "https://github.com/astrodee/threadcount"
+issues = "https://github.com/astrodee/threadcount/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "mypy",
+    "ruff==0.15.4",
+    "pre-commit",
+]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    # lmfit evaluates constrained parameter expressions (e.g. GaussianModel's
+    # `height = amplitude / max(1e-15, sigma)`) via the `uncertainties` library.
+    # `uncertainties` cannot propagate errors through `max()`, so it produces UFloat
+    # objects with std_dev=0 and emits this warning.  It is a known limitation of
+    # lmfit/uncertainties, not actionable from test code.  Suppressed to keep output clean.
+    "ignore:Using UFloat objects with std_dev==0:UserWarning",
+]
 
 [tool.setuptools.dynamic]
 version = {attr = "threadcount.__version__"}
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+
+[tool.ruff.lint]
+# Start permissive — enable a safe core set and expand gradually.
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+]
+ignore = [
+    # Rules that touch existing code style broadly — enable after incremental cleanup
+    "E501",   # line too long (handled by formatter)
+    "UP032",  # f-string conversion (Phase 2.3)
+    "B006",   # mutable default argument — existing code relies on this pattern
+    "B007",   # loop variable not used in loop body
+    "B008",   # function call in default argument
+    "B904",   # raise from inside except
+    "F401",   # unused imports — existing API re-exports need audit first
+    "F811",   # redefinition of unused name
+    "F841",   # local variable assigned but never used
+    "E741",   # ambiguous variable name (l, O, I) — widespread in astronomy code
+    # --- Rules to fix in later phases ---
+    "UP031",  # printf-style % formatting → f-strings (Phase 2.3)
+    "B905",   # zip() without explicit strict= (needs case-by-case review)
+    "F403",   # import * (needs audit before removal)
+    "E711",   # comparison to None with == (Phase 2)
+    "E722",   # bare except (Phase 2.2)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

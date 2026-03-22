@@ -1,20 +1,22 @@
 """main threadcount module."""
 
-import json
 import csv
-from types import SimpleNamespace
+import json
 from collections import OrderedDict, UserList
-import numpy as np
+from types import SimpleNamespace
+
+import astropy.units as u
+import lmfit
 import matplotlib.pyplot as plt
+import mpdaf.obj
+import numpy as np
 from matplotlib.backends.backend_pdf import PdfPages
 
-import lmfit
-import mpdaf.obj
-import astropy.units as u
-from . import lines
-from . import models
-from . import mpdaf_ext  # noqa: F401
-
+from . import (
+    lines,
+    models,
+    mpdaf_ext,  # noqa: F401
+)
 
 FLAM16 = u.Unit(1e-16 * u.erg / (u.cm**2 * u.s * u.AA))
 """A header["BUNIT"] value we have."""
@@ -32,7 +34,7 @@ def open_fits_cube(
     var_filename=None,
     var_hdu_index=None,
     mask_if_over_n_nans=None,
-    **kwargs
+    **kwargs,
 ):
     """Load a fits file using :class:`mpdaf.obj.Cube`, and handle variance in separate file.
 
@@ -297,7 +299,7 @@ def interactive_lower_threshold(image, title=""):
         # if input is convertable to float, redo loop, otherwise exit loop
         try:
             limit = float(new_limit)
-        except ValueError or TypeError:
+        except (ValueError, TypeError):
             plt.close()
             return limit
         m_img = image > limit
@@ -372,10 +374,18 @@ def get_param_values(params, param_name, default_value=np.nan):
     except AttributeError:
         pass
 
-    # 3rd: This works for everything else. If `params` is a modelresult and
-    # if `param_name` is a modelresult attribute, this will return it properly
-    # If `params` has no attribute `get` (such as if it is type int), then
-    # default value is returned.
+    # 3rd: Try attribute access (getattr). This is the correct path for
+    # ModelResult attributes such as 'redchi', 'chisqr', 'nvarys', etc., which
+    # the old params.get(param_name) call could not reach because ModelResult
+    # does not implement .get(). A sentinel ensures we only return early when
+    # the attribute genuinely exists.
+    _missing = object()
+    attr = getattr(params, param_name, _missing)
+    if attr is not _missing:
+        return attr
+
+    # 4th: Fall back to .get() for dict-like objects (e.g. plain dict) whose
+    # values are stored as keys, not as attributes.
     try:
         return params.get(param_name, default_value)
     except AttributeError:
@@ -516,6 +526,9 @@ def get_region(rx, ry=None):
 
     rx = abs(rx)
     ry = abs(ry)
+
+    if rx == 0 and ry == 0:
+        return np.array([[0, 0]])
 
     rx_int = round(rx)
     ry_int = round(ry)
@@ -2302,13 +2315,21 @@ class ResultDict(OrderedDict):
                     break
         names = lastcomment.split(delimiter)
         data = np.loadtxt(fname, **loadtxt_kwargs)
+        if data.ndim == 1:
+            if len(data) == len(names):
+                data = data[np.newaxis, :]  # single-row file → shape (1, n_cols)
+            else:
+                data = data[:, np.newaxis]  # single-col file → shape (n_rows, 1)
 
         # search for our dimension names in the names array:
         indices = [names.index(label) for label in cls.DIM_NAMES if label in names]
 
         # # sort by row and column:
-        ordering = np.lexsort(tuple([data[:, index] for index in reversed(indices)]))
-        data = data[ordering]
+        if indices:
+            ordering = np.lexsort(
+                tuple([data[:, index] for index in reversed(indices)])
+            )
+            data = data[ordering]
 
         images = data.T
 
@@ -2360,6 +2381,8 @@ class RecursiveArray(UserList):
 
     def __init__(self, array=None):
         super().__init__(array)
+        if not self.data:
+            return
         if isinstance(self.data[0], (list, np.ndarray)):
             self.data = [self.__class__(x) for x in self.data]
 
@@ -2404,6 +2427,8 @@ class RecursiveArray(UserList):
             Should be the internal list object, if nested RecursiveArray then will
             be list of lists.
         """
+        if not self.data:
+            return []
         if isinstance(self.data[0], self.__class__):
             return [x.aslist() for x in self.data]
         else:

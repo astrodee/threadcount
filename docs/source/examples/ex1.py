@@ -1,7 +1,7 @@
 # examples/ex1.py
 
 import threadcount as tc
-from threadcount.procedures import set_rcParams, open_cube_and_deredshift  # noqa: F401
+from threadcount.procedures import open_cube_and_deredshift, set_rcParams  # noqa: F401
 
 user_settings = {
     "data_filename": "MRK1486_red_metacube.fits",

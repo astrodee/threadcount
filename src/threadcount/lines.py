@@ -1,4 +1,5 @@
 """Library of line wavelengths."""
+
 import matplotlib.pyplot as plt
 
 # These are the air wavelengths in A
@@ -24,14 +25,14 @@ NeIII = 3868.760  #: = 3868.760 # [Ne III] 3869
 # TODO: implement flexibility for other units.
 # TODO: implement composite line, and ability to change attributes on this
 # one after createion.
-class Line(object):
+class Line:
     """Line object containing center and wavelength range."""
 
     def __init__(self, center, plus=15, minus=15, label="", save_str="", **kwargs):
-        """Create a Line instance, defining center, bandwidth, and plot/save strings.
+        r"""Create a Line instance, defining center, bandwidth, and plot/save strings.
 
         A Line contains the information used to define the window that threadcount
-        will use to fit the line, as well as the display and save information. 
+        will use to fit the line, as well as the display and save information.
         You may use one of the predefined lines, or define your own. See Examples below.
 
         Parameters
