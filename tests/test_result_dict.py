@@ -390,22 +390,6 @@ class TestResultDictRoundTrip3D:
 class TestResultDictRoundTripNoCoordinates:
     """Round-trip through savetxt/loadtxt when generate_pixel_coordinates=False."""
 
-    # ------------------------------------------------------------------
-    # BUG: loadtxt crashes when no dimension columns (row/col) are present
-    # ------------------------------------------------------------------
-    # When indices=[] the code unconditionally calls np.lexsort(()) which
-    # raises TypeError: need sequence of keys with len > 0.
-    # The guard `if len(indices) == 0` exists later in the function but
-    # is never reached because the crash happens first.
-    # Fix tracked in ROADMAP §2.19.
-    # ------------------------------------------------------------------
-    @pytest.mark.xfail(
-        reason=(
-            "np.lexsort(()) raises TypeError when no dimension columns exist; "
-            "the len(indices)==0 guard is unreachable (see ROADMAP §2.19)"
-        ),
-        strict=True,
-    )
     def test_no_coordinates_round_trip(self, tmp_path):
         """Files without row/col columns should survive a clean round-trip."""
         rng = np.random.default_rng(42)
@@ -423,13 +407,6 @@ class TestResultDictRoundTripNoCoordinates:
         for name in names:
             np.testing.assert_allclose(rd2[name], rd[name].ravel(), rtol=1e-6)
 
-    @pytest.mark.xfail(
-        reason=(
-            "np.lexsort(()) raises TypeError when no dimension columns exist; "
-            "the len(indices)==0 guard is unreachable (see ROADMAP §2.19)"
-        ),
-        strict=True,
-    )
     def test_no_coordinates_nan_round_trip(self, tmp_path):
         """NaN values must survive when no pixel coordinates are present."""
         data = np.array([[[1.0, np.nan], [np.nan, 4.0]]])
@@ -470,20 +447,6 @@ class TestResultDictLoadtxtErrors:
         with pytest.raises(ValueError):
             ResultDict.loadtxt(str(fpath), delimiter="\t")
 
-    # ------------------------------------------------------------------
-    # BUG: loadtxt crashes on a 1×1 spatial grid (single-spaxel file)
-    # ------------------------------------------------------------------
-    # np.loadtxt returns a 1D array when the file has exactly one data row.
-    # loadtxt then does data[:, index] which raises IndexError on a 1D array.
-    # Fix tracked in ROADMAP §2.19.
-    # ------------------------------------------------------------------
-    @pytest.mark.xfail(
-        reason=(
-            "np.loadtxt returns 1D array for single-row files; "
-            "data[:, index] raises IndexError (see ROADMAP §2.19)"
-        ),
-        strict=True,
-    )
     def test_single_spaxel_round_trip(self, tmp_path):
         """A 1×1 spatial grid produces a single-row file that crashes loadtxt."""
         data = np.array([[[1.5]], [[2.5]]])  # shape (2, 1, 1)

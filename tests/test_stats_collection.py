@@ -337,26 +337,11 @@ class TestRecursiveArray:
         assert isinstance(result, tf.RecursiveArray)
         assert list(result) == [10, 15]
 
-    @pytest.mark.xfail(
-        reason=(
-            "Bug: RecursiveArray.__init__ accesses self.data[0] unconditionally. "
-            "An empty list raises IndexError: list index out of range."
-        ),
-        strict=True,
-    )
     def test_empty_list_does_not_raise(self):
         """RecursiveArray([]) should produce an empty container, not IndexError."""
         ra = tf.RecursiveArray([])
         assert list(ra) == []
 
-    @pytest.mark.xfail(
-        reason=(
-            "Bug: RecursiveArray.aslist() accesses self.data[0] unconditionally, "
-            "same root cause as the __init__ bug (§2.23). Even after __init__ is "
-            "fixed, aslist() will still raise IndexError on an empty instance."
-        ),
-        strict=True,
-    )
     def test_aslist_empty_list_does_not_raise(self):
         """aslist() on an empty RecursiveArray should return [], not IndexError.
 

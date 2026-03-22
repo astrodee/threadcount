@@ -704,7 +704,7 @@ In `models/fast_models.py`:
 - **Fix**: initialise `results` with `np.full(len(values), np.nan)` (float placeholder) and replace the append loop with indexed assignment; or after the loop check `len(results) == len(values)` and pad missing entries with `np.nan` before calling `column_stack`.
 - (`test_unreachable_fraction_does_not_crash`, `xfail strict`)
 
-### 2.30 — Fix `create_outflow_mask` UnboundLocalError on unknown `which_contour`
+### 2.30 — Fix `create_outflow_mask` UnboundLocalError on unknown `which_contour` ✅
 `create_outflow_mask` searches for `which_contour` in `contour_levels` using a `for` loop with `break`, and stores the matching index in `idx`. If `which_contour` is not present in `contour_levels`, the loop completes without executing `break` and `idx` is never assigned. The next reference to `idx` in `col_span = line[2 + idx]` raises `UnboundLocalError: local variable 'idx' referenced before assignment` rather than a descriptive error.
 - **Fix**: replace the loop with `idx = list(contour_levels).index(which_contour)`, which naturally raises `ValueError: <value> is not in list` if the value is absent. Alternatively, add an `else` clause to the `for` loop or an explicit guard before the loop.
 - (`test_unknown_which_contour_raises_not_silent`, `xfail strict`)
@@ -764,7 +764,7 @@ All composite model classes (`Const_1GaussModel`, `Const_2GaussModel`, `Const_3G
 - Add a cross-reference to `_guess_multiline2` / `_guess_multiline2_d` as the correct choice for spatially-offset doublets.
 - Consider adding a `separate_lines=False` flag that routes to the multiline variant automatically.
 
-### 2.16 — Fix `set_param_hint_endswith` silently overwriting stricter user bounds
+### 2.16 — Fix `set_param_hint_endswith` silently overwriting stricter user bounds ✅
 `lmfit_ext.set_param_hints_endswith` calls `model.set_param_hint(name, **kwargs)` unconditionally for every matching parameter. When `fit_line.py` uses it to apply the instrument-dispersion floor (`min=instrument_dispersion_rest`) it overwrites any tighter `min` or looser `max` the user already set on a specific parameter — e.g. a custom model with `g2_sigma min=2` would silently have that minimum replaced by `~0.77`.
 
 **Workaround** (in user scripts): add the following monkey-patch at the top of the script, before importing threadcount procedures:
@@ -828,7 +828,7 @@ near-truth Gaussian params rather than `model.guess()`).
 family also uses these guess functions and will benefit automatically; the improvement is
 not limited to `Quadratic_*` models.
 
-### 2.18 — Fix `get_param_values` branch 3 unreachable for `ModelResult` attributes
+### 2.18 — Fix `get_param_values` branch 3 unreachable for `ModelResult` attributes ✅
 
 The docstring for `get_param_values` in `fit.py` states:
 
@@ -847,7 +847,7 @@ This correctly handles both `ModelResult` attributes and any other objects that 
 
 **Test**: `tests/test_param_extraction.py::TestGetParamValuesModelResultAttribute` is marked `xfail(strict=True)` and will automatically turn green once this fix is applied.
 
-### 2.19 — Fix two `ResultDict.loadtxt` crashes on edge-case files
+### 2.19 — Fix two `ResultDict.loadtxt` crashes on edge-case files ✅
 
 Two separate code-path bugs exist in `loadtxt`, both discovered during the §1.6 test-coverage audit.  Neither can be triggered through normal multi-spaxel usage, which is why they went undetected.
 
@@ -898,7 +898,7 @@ if (snr_image[idx] < snr_threshold) or np.isnan(snr_image[idx]):
 
 ---
 
-### 2.21 — Fix `get_region(rx=0)` returning an empty array instead of `[[0, 0]]`
+### 2.21 — Fix `get_region(rx=0)` returning an empty array instead of `[[0, 0]]` ✅
 
 Found during Phase 1.8A test implementation. In `fit.py`, `get_region` computes `rx2 = rx * rx` before the ellipse-inequality check:
 
@@ -959,7 +959,7 @@ A more general approach would loop over the models, filter `NaN` entries first, 
 
 ---
 
-### 2.23 — Fix `RecursiveArray` crashes on empty data (`__init__` and `aslist`)
+### 2.23 — Fix `RecursiveArray` crashes on empty data (`__init__` and `aslist`) ✅
 
 Found during Phase 1.8C code review.
 
@@ -1037,7 +1037,7 @@ Alternatively, if sorting by height is not needed, make center-only sorting the 
 
 Will turn green (xpass → pass) once the guard is added.
 
-### 2.25 — Fix `process_single_spectrum` NaN SNR gate
+### 2.25 — Fix `process_single_spectrum` NaN SNR gate ✅
 
 In `fit_line.process_single_spectrum`:
 ```python
@@ -1057,7 +1057,7 @@ if (snr_image[idx] < snr_threshold) or np.isnan(snr_image[idx]):
 
 Will turn green once the `is True` identity check is removed.
 
-### 2.26 — Fix missing `None` guard on chop-bandwidth retry in `process_single_spectrum`
+### 2.26 — Fix missing `None` guard on chop-bandwidth retry in `process_single_spectrum` ✅
 
 In `fit_line.process_single_spectrum`, a second `lmfit` call is made after chopping the spectrum by ±5 Å:
 ```python

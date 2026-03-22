@@ -114,20 +114,8 @@ class TestProcessSingleSpectrum:
         assert result != [None]
         assert result[0] is not None
 
-    @pytest.mark.xfail(
-        reason=(
-            "Bug §2.25: process_single_spectrum uses "
-            "'np.isnan(snr_image[idx]) is True' to detect NaN SNR. "
-            "snr_image[idx] is a numpy.float64 scalar; np.isnan() returns "
-            "numpy.bool_(True), which is NOT the Python singleton True, so "
-            "'numpy.bool_(True) is True' evaluates to False. "
-            "NaN < threshold is also False in IEEE 754. As a result, NaN SNR "
-            "pixels are not gated out and proceed to fitting."
-        ),
-        strict=True,
-    )
     def test_snr_nan_returns_none_list(self, _subcube, _s):
-        """NaN SNR value should return [None] — currently broken (Bug §2.25)."""
+        """NaN SNR value must return [None]."""
         snr = np.full(_subcube.shape[1:], np.nan)
         models = [tc.models.Const_1GaussModel()]
         result = fit_line.process_single_spectrum(
@@ -273,17 +261,6 @@ class TestProcessSingleSpectrum:
         )
         assert result == [None]
 
-    @pytest.mark.xfail(
-        reason=(
-            "Bug §2.26: process_single_spectrum does not guard against lmfit "
-            "returning None on the chop-bandwidth retry. The original first call "
-            "has an 'if f is None: return [None]' guard, but the retry path goes "
-            "directly to 'if f.success is False:', which raises "
-            "AttributeError: 'NoneType' object has no attribute 'success' when "
-            "the chopped sub-spectrum is entirely masked."
-        ),
-        strict=True,
-    )
     def test_first_model_fail_chop_true_retry_returns_none_on_masked_spectrum(
         self, _subcube, monkeypatch
     ):

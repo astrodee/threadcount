@@ -129,24 +129,11 @@ class TestGetParamValuesFromParameters:
 # ===========================================================================
 
 
-# BUG (roadmap §2.18): the docstring says branch 3 can extract a ModelResult
-# attribute such as 'redchi' via params.get(param_name, default_value).  In
-# practice the ModelResult class in this lmfit fork does NOT implement .get(),
-# so the except-AttributeError guard fires and default_value is returned
-# instead.  The tests below assert what SHOULD work per the docstring; they are
-# marked xfail(strict=True) so they fail loudly now and turn green automatically
-# once §2.18 is fixed.
-@pytest.mark.xfail(
-    strict=True,
-    reason="Bug §2.18: ModelResult.get() absent in lmfit fork so branch 3 is unreachable",
-)
 class TestGetParamValuesModelResultAttribute:
     """Branch 3: param_name is a ModelResult attribute (e.g. chisqr, redchi).
 
-    Per the docstring, ``get_param_values(result, 'redchi')`` should return
-    ``result.redchi`` via ``result.get('redchi', default_value)``.  This does
-    not work in the current lmfit fork because ``ModelResult`` has no ``.get()``
-    method.  See roadmap §2.18 for the fix.
+    ``get_param_values(result, 'redchi')`` returns ``result.redchi`` via
+    ``getattr(result, 'redchi')``.
     """
 
     def test_extracts_redchi(self, gaussian_model_result):

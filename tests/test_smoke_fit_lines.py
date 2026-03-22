@@ -216,19 +216,6 @@ class TestSingleSpaxelFit:
         )
         assert result == [None]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "Bug in process_single_spectrum: the NaN-SNR guard uses "
-            "`np.isnan(snr_image[idx]) is True`, which is an identity comparison "
-            "against the Python True singleton. np.isnan() returns numpy.bool_ "
-            "(confirmed numpy 1.26.4), which is NOT the same object, so the "
-            "comparison always evaluates to False. Spaxels whose SNR is NaN are "
-            "therefore NOT skipped — they are passed straight to the fitter. "
-            "Fix: replace `is True` with a plain truthiness test: "
-            "`np.isnan(snr_image[idx])`. Fix target: Phase 2."
-        ),
-    )
     def test_snr_nan_skips_spaxel(self, subcube_av, minimal_settings):
         """A spaxel with SNR = NaN must be treated as failing the threshold check."""
         nan_snr_image = np.full((_CUBE_NY, _CUBE_NX), 999.0)

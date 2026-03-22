@@ -146,16 +146,6 @@ class TestGetRegion:
         """abs() normalisation: get_region(-2) must equal get_region(2)."""
         np.testing.assert_array_equal(tf.get_region(-2), tf.get_region(2))
 
-    @pytest.mark.xfail(
-        reason=(
-            "Bug: get_region(0) triggers a division-by-zero when rx2=ry2=0. "
-            "The inside-ellipse check computes col²/rx2 = 0/0 = nan, making "
-            "nan <= 1 evaluate to False, so all pixels are excluded and an empty "
-            "array is returned instead of [[0, 0]]. Fix: special-case rx==0 "
-            "before computing rx2."
-        ),
-        strict=True,
-    )
     def test_rx_zero_returns_only_origin(self):
         region = tf.get_region(0)
         np.testing.assert_array_equal(region, [[0, 0]])

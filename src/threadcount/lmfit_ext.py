@@ -308,7 +308,13 @@ def set_param_hints_endswith(self, name, **kwargs):
     names = self.param_names
     for this_name in names:
         if this_name.endswith(name):
-            self.set_param_hint(this_name, **kwargs)
+            merged = dict(kwargs)
+            existing = self.param_hints.get(this_name, {})
+            if "min" in merged and "min" in existing:
+                merged["min"] = max(merged["min"], existing["min"])
+            if "max" in merged and "max" in existing:
+                merged["max"] = min(merged["max"], existing["max"])
+            self.set_param_hint(this_name, **merged)
 
 
 def mc_iter(self, n_mc_iterations=0, distribution="normal"):

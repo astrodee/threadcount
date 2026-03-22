@@ -632,14 +632,6 @@ class TestCreateOutflowMask:
         assert result[1, 5]  # row 1: masked center → left True
         assert result[1, 0]  # row 1: also True at far column
 
-    @pytest.mark.xfail(
-        reason=(
-            "§2.30: when which_contour is absent from contour_levels, the for-loop "
-            "never sets idx, leaving it unbound. Subsequent 'col_span = line[2 + idx]' "
-            "raises UnboundLocalError instead of a clean ValueError."
-        ),
-        strict=True,
-    )
     def test_unknown_which_contour_raises_not_silent(self):
         """which_contour not in contour_levels should raise ValueError, not UnboundLocalError."""
         co = self._make_co([(0, 5, 2)])

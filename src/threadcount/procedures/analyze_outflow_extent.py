@@ -683,10 +683,12 @@ def calculate_contours(flux_masked_array, levels=None, clip_max=3, center_row=35
 
 
 def create_outflow_mask(contour_output, contour_levels, which_contour, output_shape):
-    for i, val in enumerate(contour_levels):
-        if val == which_contour:
-            idx = i
-            break
+    try:
+        idx = list(contour_levels).index(which_contour)
+    except ValueError:
+        raise ValueError(
+            f"{which_contour!r} is not in contour_levels {list(contour_levels)}"
+        ) from None
     outflow_mask = np.full(output_shape, True)
     for line in zip(
         *contour_output

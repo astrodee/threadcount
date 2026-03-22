@@ -189,16 +189,6 @@ class TestSetParamHintEndswith:
                 assert hints.get("min") == 0.3
                 assert hints.get("max") == 5.0
 
-    @pytest.mark.xfail(
-        reason=(
-            "Bug §2.16: set_param_hint_endswith unconditionally calls "
-            "model.set_param_hint(name, **kwargs) for every matching parameter, "
-            "overwriting any pre-existing tighter bound. Setting g2_sigma min=2.0 "
-            "then calling set_param_hint_endswith with min=0.5 should preserve "
-            "min=2.0 (stricter), but currently overwrites it with 0.5."
-        ),
-        strict=True,
-    )
     def test_preexisting_stricter_min_not_overwritten(self):
         """A pre-set tighter min must not be loosened by a batch hint call."""
         model = tc.models.Const_2GaussModel()
