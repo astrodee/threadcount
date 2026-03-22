@@ -824,3 +824,73 @@ class TestContoursToArcsec:
         np.testing.assert_allclose(result[0], [0.0, 0.2, 0.4])
         # col channel: co[1] * 0.2 = [1.0, 1.2, 1.4]
         np.testing.assert_allclose(result[1], [1.0, 1.2, 1.4])
+
+
+# ---------------------------------------------------------------------------
+# plt_image_extent — matplotlib smoke test (Phase 1.10)
+# ---------------------------------------------------------------------------
+
+
+class TestPltImageExtentSmoke:
+    """1.10 — plt_image_extent: smoke test using the Agg backend.
+
+    The function calls plt.imshow / plt.gca() in stateful global-pyplot style
+    (no fig/ax passed in).  The only contract tested here is that it does not
+    raise when called with valid inputs — which is enough to catch matplotlib
+    API renames or signature changes during a dependency upgrade.
+    """
+
+    def setup_method(self):
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        plt.close("all")
+
+    def test_does_not_raise_with_default_args(self):
+        """Calling with a 2-D array and a valid extent does not raise."""
+        import matplotlib.pyplot as plt
+
+        from threadcount.procedures.analyze_outflow_extent import plt_image_extent
+
+        data = np.ones((5, 5))
+        extent = [-1.0, 1.0, -1.0, 1.0]  # [left, right, bottom, top] in arcsec
+        plt_image_extent(data, extent, title="test")
+        plt.close("all")
+
+    def test_horizontal0_false_skips_axhline(self):
+        """horizontal0=False should not add any axhline to the current axes."""
+        import matplotlib.pyplot as plt
+        from matplotlib.lines import Line2D
+
+        from threadcount.procedures.analyze_outflow_extent import plt_image_extent
+
+        data = np.ones((5, 5))
+        plt_image_extent(data, [-1, 1, -1, 1], horizontal0=False)
+        ax = plt.gca()
+        hlines = [
+            c
+            for c in ax.get_children()
+            if isinstance(c, Line2D) and c.get_label() == "galaxy midplane"
+        ]
+        assert len(hlines) == 0
+        plt.close("all")
+
+    def test_horizontal0_true_adds_axhline(self):
+        """horizontal0=True (default) should add an axhline labelled 'galaxy midplane'."""
+        import matplotlib.pyplot as plt
+        from matplotlib.lines import Line2D
+
+        from threadcount.procedures.analyze_outflow_extent import plt_image_extent
+
+        data = np.ones((5, 5))
+        plt_image_extent(data, [-1, 1, -1, 1], horizontal0=True)
+        ax = plt.gca()
+        hlines = [
+            c
+            for c in ax.get_children()
+            if isinstance(c, Line2D) and c.get_label() == "galaxy midplane"
+        ]
+        assert len(hlines) == 1
+        plt.close("all")

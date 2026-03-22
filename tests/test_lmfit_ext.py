@@ -367,3 +367,75 @@ class TestSummaryArray:
         """A misspelt fit_info attribute raises AttributeError (no silent NaN)."""
         with pytest.raises(AttributeError):
             _RESULT.summary_array(fit_info=["nonexistent_fit_info_key"])
+
+
+# ---------------------------------------------------------------------------
+# plot2 / plot_components — matplotlib smoke tests (Phase 1.10)
+# ---------------------------------------------------------------------------
+
+
+class TestPlot2Smoke:
+    """1.10 — plot2: smoke test using the Agg backend."""
+
+    def setup_method(self):
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        plt.close("all")
+
+    def test_returns_fig_and_two_axes(self):
+        """plot2() returns (fig, ax_res, ax_fit) without raising."""
+        import matplotlib.pyplot as plt
+        from matplotlib.axes import Axes
+        from matplotlib.figure import Figure
+
+        result = _RESULT.plot2()
+        assert isinstance(result, tuple) and len(result) == 3
+        fig, ax_res, ax_fit = result
+        assert isinstance(fig, Figure)
+        assert isinstance(ax_res, Axes)
+        assert isinstance(ax_fit, Axes)
+        plt.close("all")
+
+    def test_accepts_existing_figure(self):
+        """Passing an existing Figure reuses it instead of creating a new one."""
+        import matplotlib.pyplot as plt
+        from matplotlib.figure import Figure
+
+        existing = plt.figure()
+        fig, _, _ = _RESULT.plot2(fig=existing)
+        assert fig is existing
+        plt.close("all")
+
+
+class TestPlotComponentsSmoke:
+    """1.10 — plot_components: smoke test using the Agg backend."""
+
+    def setup_method(self):
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        plt.close("all")
+
+    def test_returns_axes(self):
+        """plot_components() returns an Axes object without raising."""
+        import matplotlib.pyplot as plt
+        from matplotlib.axes import Axes
+
+        ax = _RESULT.plot_components()
+        assert isinstance(ax, Axes)
+        plt.close("all")
+
+    def test_accepts_existing_axes(self):
+        """Passing an existing Axes reuses it and returns the same object."""
+        import matplotlib.pyplot as plt
+        from matplotlib.axes import Axes
+
+        fig, existing_ax = plt.subplots()
+        returned = _RESULT.plot_components(ax=existing_ax)
+        assert returned is existing_ax
+        plt.close("all")

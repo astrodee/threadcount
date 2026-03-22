@@ -583,6 +583,43 @@ All functions here are pure numpy; no mpdaf or matplotlib dependency.
 
 ---
 
+### 1.10 — Smoke tests for matplotlib-dependent functions ✅
+
+The Phase 1 safety net has no coverage of any code that calls matplotlib directly.
+Before updating matplotlib (Phase 0b), add minimal smoke tests that catch API renames,
+removed functions, and changed return types — without trying to assert pixel-level rendering.
+
+**Scope:** The three lowest-cost, highest-value targets:
+
+1. **`plot2` (lmfit_ext)** — monkey-patched onto `ModelResult`; calls `plt.GridSpec`,
+   `fig.add_subplot`, `plt.setp`, `plt.rcParams`. Tested with the module-level `_RESULT`
+   fixture already used in `test_lmfit_ext.py`.
+   - Returns `(fig, ax_res, ax_fit)` tuple (types verified).
+   - Accepts an existing `Figure` and reuses it.
+
+2. **`plot_components` (lmfit_ext)** — monkey-patched onto `ModelResult`; calls
+   `ax.plot`, `ax.axhline`. Tested with same `_RESULT` fixture.
+   - Returns an `Axes` object.
+   - Accepts and returns an existing `Axes`.
+
+3. **`plt_image_extent` (analyze_outflow_extent)** — calls `plt.imshow`, `plt.gca()`,
+   `plt.xlabel`, `plt.ylabel`, `axhline`. Pure-pyplot stateful style; no fig/ax passed in.
+   - Does not raise with a synthetic 2-D array and numeric extent.
+   - `horizontal0=False` adds no `"galaxy midplane"` axhline.
+   - `horizontal0=True` (default) adds exactly one `"galaxy midplane"` axhline.
+
+**Not added (too coupled to mpdaf objects, low ROI):**
+- `save_pdf_plots`, `plot_ModelResults_pixel`, `plot_baseline` in `fit.py`.
+- All `interactive_*` functions (block on `plt.show`).
+
+**Files modified:**
+- `tests/test_lmfit_ext.py` — new classes `TestPlot2Smoke`, `TestPlotComponentsSmoke`
+- `tests/test_procedures_analyze_outflow_extent.py` — new class `TestPltImageExtentSmoke`
+
+All tests use `matplotlib.use("Agg")` (non-interactive backend, safe in CI).
+
+---
+
 ## Phase 0b — Dependency Modernisation (requires Phase 1 safety net)
 
 *These tasks carry real risk of breaking behaviour. The Phase 1 tests are your safety net — run the full suite after each step.*
