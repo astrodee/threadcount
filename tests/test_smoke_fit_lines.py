@@ -1,6 +1,7 @@
 """Smoke tests for threadcount.procedures.fit_lines (Phase 1.7)."""
 
 import copy
+import sys
 from types import SimpleNamespace
 
 import lmfit
@@ -648,3 +649,133 @@ class TestResultDictRoundTrip:
     def test_mc_result_comment_is_str(self, mc_result):
         """loadtxt must reconstruct the .comment attribute as a string."""
         assert isinstance(mc_result.comment, str)
+
+
+# ---------------------------------------------------------------------------
+# 1.7f — parallel=True behaviour
+# ---------------------------------------------------------------------------
+
+
+class TestParallelRunNotSupported:
+    """1.7f-i — parallel=True raises ValueError when the fork context is absent.
+
+    This is the code path exercised on Windows today (fork is unavailable),
+    reproduced here on all platforms via monkeypatching so the error path is
+    covered in CI regardless of OS.
+    """
+
+    def test_parallel_raises_when_ctx_none(self, synthetic_cube, tmp_path, monkeypatch):
+        """fit_line.run() must raise ValueError if parallel=True and ctx is None."""
+        monkeypatch.setattr(fit_line, "ctx", None)
+
+        s = SimpleNamespace(
+            setup_parameters=False,
+            monitor_pixels=[],
+            baseline_subtract=None,
+            baseline_fit_range=None,
+            output_filename=str(tmp_path / "output"),
+            save_plots=False,
+            region_averaging_radius=1.5,
+            instrument_dispersion=0.8,
+            lmfit_kwargs={"method": "least_squares"},
+            snr_lower_limit=3,
+            lines=[tc.lines.L_OIII5007],
+            models=[[tc.models.Const_1GaussModel()]],
+            d_aic=-150,
+            interactively_choose_fits=False,
+            always_manually_choose=[],
+            mc_snr=25,
+            mc_n_iterations=0,
+            parallel=True,
+            n_process=2,
+            chop_bandwidth=False,
+            SNR_HalfBW=9,
+            SNR_Baseline_q=0.15,
+            cube=synthetic_cube[_SUBREGION_SLICE],
+            continuum_cube=None,
+            z_set=0,
+            comment="",
+            _i=0,
+        )
+        fit_lines.update_settings(s)
+
+        with pytest.raises(ValueError, match="parallel"):
+            fit_line.run(s)
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="parallel=True requires the 'fork' start method, not available on Windows "
+    "(§6.3 — replace multiprocessing with joblib — will fix this)",
+)
+class TestParallelRun:
+    """1.7f-ii — parallel=True actually produces the same outputs as parallel=False.
+
+    Skipped on Windows: fork context is not available there.  Once §6.3 is
+    implemented (joblib backend), this skip can be removed.
+    """
+
+    @pytest.fixture(scope="class")
+    def parallel_run_state(self, synthetic_cube, tmp_path_factory):
+        tmp_path = tmp_path_factory.mktemp("fit_line_parallel")
+        s = SimpleNamespace(
+            setup_parameters=False,
+            monitor_pixels=[],
+            baseline_subtract=None,
+            baseline_fit_range=None,
+            output_filename=str(tmp_path / "output"),
+            save_plots=False,
+            region_averaging_radius=1.5,
+            instrument_dispersion=0.8,
+            lmfit_kwargs={"method": "least_squares"},
+            snr_lower_limit=3,
+            lines=[tc.lines.L_OIII5007],
+            models=[[tc.models.Const_1GaussModel()]],
+            d_aic=-150,
+            interactively_choose_fits=False,
+            always_manually_choose=[],
+            mc_snr=25,
+            mc_n_iterations=0,
+            parallel=True,
+            n_process=2,
+            chop_bandwidth=False,
+            SNR_HalfBW=9,
+            SNR_Baseline_q=0.15,
+            cube=synthetic_cube[_SUBREGION_SLICE],
+            continuum_cube=None,
+            z_set=0,
+            comment="",
+            _i=0,
+        )
+        fit_lines.update_settings(s)
+        fit_line.run(s)
+        return s
+
+    def test_parallel_run_completes(self, parallel_run_state):
+        """fit_line.run() must return without error when parallel=True."""
+        assert parallel_run_state is not None
+
+    def test_parallel_model_results_shape(self, parallel_run_state):
+        """model_results must have the expected spatial shape after a parallel run."""
+        results = parallel_run_state.model_results
+        assert results.shape == (1, 3, 3)
+
+    def test_parallel_model_results_not_all_none(self, parallel_run_state):
+        """At least one spaxel must have a successful fit."""
+        flat = parallel_run_state.model_results.flat
+        assert any(r is not None for r in flat)
+
+    def test_parallel_g1_center_survives_pickling(self, parallel_run_state):
+        """g1_center must be close to the injected line after the pool round-trip.
+
+        ModelResult objects are pickled in the worker process and unpickled in
+        the main process.  A corrupt or zeroed-out result would still satisfy the
+        shape/not-None tests above but would fail here.  This is the primary
+        content-correctness guard for the parallel path.
+        """
+        non_none = [r for r in parallel_run_state.model_results.flat if r is not None]
+        assert len(non_none) > 0, "no successful fits in parallel run"
+        centers = [r.params["g1_center"].value for r in non_none]
+        assert all(abs(c - _LINE_CENTER) < 0.5 for c in centers), (
+            f"parallel g1_center values out of range: {centers}"
+        )

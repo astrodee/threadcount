@@ -272,6 +272,21 @@ Both `simple_model.txt` and `mc_best_fit.txt` are checked. `best_fit.txt` is imp
 4. **`mc_result` semantic tests** — none existed; added key-presence (`avg_g1_center`), finite-values, and proximity-to-line checks.
 5. **`.comment` tests** — `loadtxt` reconstructs the attribute; added `test_simple_model_comment_is_str` and `test_mc_result_comment_is_str`.
 
+#### 1.7f — `parallel=True` code path ✅
+
+The parallel path uses `multiprocessing.get_context("fork")`, which is unavailable on Windows.
+Two test classes cover this:
+
+- **`TestParallelRunNotSupported`** — monkeypatches `fit_line.ctx = None` (simulating Windows)
+  and asserts `fit_line.run()` raises `ValueError` containing `"parallel"`. Runs on all platforms.
+- **`TestParallelRun`** — exercises `parallel=True` end-to-end on the 3×3 subregion with
+  `n_process=2`. Skipped on Windows (`sys.platform == "win32"`) until §6.3 (joblib migration) is
+  complete. Assertions:
+  - `model_results.shape == (1, 3, 3)` — spatial shape preserved after pool round-trip.
+  - At least one spaxel is non-None.
+  - All non-None `g1_center` values are within 0.5 Å of the injected line centre — the primary
+    content-correctness check that `ModelResult` objects survived pickling intact.
+
 ---
 
 ### 1.8 — Tests for `fit.py` utility functions
@@ -644,7 +659,7 @@ The `pyproject.toml` pinned `lmfit` to `sebusch/light-lmfit-py@light_dev` — a 
 
 > **Process note — test-first methodology**: Before upgrading a pinned dependency, first confirm the current full test suite is green as a baseline. Then upgrade and run the suite again. Any new failures are unambiguously caused by the version bump. This is the correct order regardless of whether you expect failures; it turns the upgrade into a structured experiment with a clear before/after. (In 0b.1, the lmfit fork was swapped without first writing characterisation tests against the fork. This worked because the fork's contract was mathematically identical to upstream — but the `sdterr` typo and `.aic`/`.bic` formula differences in the fork would have been caught earlier had fork-specific tests existed first.)
 
-**Resolution:** Created fresh `tc-np2` env (Python 3.13) with numpy 2.4.3, numba 0.64.0, pandas 3.0.1, scipy 1.17.1 — the full modern science stack that was being blocked by the `<2` pin. Full suite: **611 passed, 21 xfailed, 0 failures** — identical to the tc-dev baseline on numpy 1.26.4. The `<2` upper-bound pin was therefore unnecessary. `pyproject.toml` updated: `requires-python >= 3.10`; `numpy >= 1.24` (no upper bound; `>=1.24` is lmfit 1.3.4's own declared floor, making the old `>=1.17` effectively dead). Also fixed stale repo URLs (`FisherAstronomy` → `astrodee`). CI matrix in `.github/workflows/ci.yml` expanded from `["3.11"]` to `["3.10", "3.11", "3.12", "3.13"]`; stale lmfit-fork install comment removed.
+**Resolution:** Created fresh `tc-np2` env (Python 3.13) with numpy 2.4.3, numba 0.64.0, pandas 3.0.1, scipy 1.17.1 — the full modern science stack that was being blocked by the `<2` pin. Full suite: **611 passed, 21 xfailed, 0 failures** — identical to the tc-dev baseline on numpy 1.26.4. The `<2` upper-bound pin was therefore unnecessary. `pyproject.toml` updated: `requires-python >= 3.10`; `numpy >= 1.24` (no upper bound; `>=1.24` is lmfit 1.3.4's own declared floor, making the old `>=1.17` effectively dead). Also fixed stale repo URLs (`FisherAstronomy` → `astrodee`). CI matrix in `.github/workflows/ci.yml` expanded from `["3.11"]` to `["3.10", "3.11", "3.12", "3.13"]` on Linux; added macOS-latest and windows-latest for Python 3.13 only (6 CI jobs total). Stale lmfit-fork install comment removed. Added tests §1.7f for the parallel code path: `TestParallelRunNotSupported` (monkeypatches `ctx=None`, asserts `ValueError` on any platform) and `TestParallelRun` (exercises `parallel=True` end-to-end on the 3×3 subregion, skipped on Windows until §6.3 is complete). Key assertion: `g1_center` values from pickling-round-tripped `ModelResult` objects must be within 0.5 Å of the injected line centre.
 
 ---
 
