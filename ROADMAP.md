@@ -636,13 +636,15 @@ The `pyproject.toml` pinned `lmfit` to `sebusch/light-lmfit-py@light_dev` — a 
 
 **Resolution:** switched to upstream `lmfit >= 1.3.4`. All fork-specific behaviour was either already vendored in `lmfit_ext.py` or was a bug. The numba JIT performance patch for `Parameter.setup_bounds` (which accelerates the bound-transform hot path to correlate with `fast_models.py`) has been re-implemented as a monkey-patch in `lmfit_ext.py` (`_numba_setup_bounds`). The original lmfit method is saved as `_original_setup_bounds` immediately before `extend_lmfit` replaces it, making it available for two-branch comparison in tests. Tests added in `test_lmfit_ext.py`: `TestNumbaKernels` (kernel math correctness against analytic formulas), `TestNumbaMatchesLmfit` (two-branch comparison: our patch vs `_original_setup_bounds` at a grid of probe values for all 4 bound cases — catches formula divergence independently of self-consistency), `TestNumbaSetupBounds` (self-consistent round-trips confirming invertibility), `TestNumbaSetupBoundsIntegration` (bounded fit convergence). Full test suite: **57 passed, 2 xfailed** in `test_lmfit_ext.py`.
 
-### 0b.2 — Modernise `pyproject.toml`
+### ✅ 0b.2 — Modernise `pyproject.toml`
 - Python `>= 3.6` is EOL. Raise the floor to `>= 3.10` (f-strings, `match`, `dataclasses`, `typing` improvements become available without backports).
 - Run the test suite against **numpy 2** (install it in a fresh env). If all tests pass, drop the `numpy < 2` upper-bound pin entirely. If they don't, the failures pinpoint exactly what needs fixing before the pin can be removed.
 - Add a lower bound `numpy >= 1.23` regardless, since the current constraint is one-sided and underspecified.
 - Expand the CI matrix (from 0a.2) to cover the newly-supported Python and numpy versions.
 
 > **Process note — test-first methodology**: Before upgrading a pinned dependency, first confirm the current full test suite is green as a baseline. Then upgrade and run the suite again. Any new failures are unambiguously caused by the version bump. This is the correct order regardless of whether you expect failures; it turns the upgrade into a structured experiment with a clear before/after. (In 0b.1, the lmfit fork was swapped without first writing characterisation tests against the fork. This worked because the fork's contract was mathematically identical to upstream — but the `sdterr` typo and `.aic`/`.bic` formula differences in the fork would have been caught earlier had fork-specific tests existed first.)
+
+**Resolution:** Created fresh `tc-np2` env (Python 3.13) with numpy 2.4.3, numba 0.64.0, pandas 3.0.1, scipy 1.17.1 — the full modern science stack that was being blocked by the `<2` pin. Full suite: **611 passed, 21 xfailed, 0 failures** — identical to the tc-dev baseline on numpy 1.26.4. The `<2` upper-bound pin was therefore unnecessary. `pyproject.toml` updated: `requires-python >= 3.10`; `numpy >= 1.24` (no upper bound; `>=1.24` is lmfit 1.3.4's own declared floor, making the old `>=1.17` effectively dead). Also fixed stale repo URLs (`FisherAstronomy` → `astrodee`). CI matrix in `.github/workflows/ci.yml` expanded from `["3.11"]` to `["3.10", "3.11", "3.12", "3.13"]`; stale lmfit-fork install comment removed.
 
 ---
 
