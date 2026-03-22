@@ -466,7 +466,7 @@ The five procedures (`open_cube_and_deredshift`, `fit_lines`, `fit_line`, `analy
 
 That leaves two procedures with testable logic:
 
-#### A. `fit_line` sub-functions (`tests/test_procedures_fit_line.py`)
+#### A. `fit_line` sub-functions (`tests/test_procedures_fit_line.py`) ✅
 
 `process_single_spectrum` contains the only branching logic not exercised by the 1.7 smoke test.  Use the synthetic cube fixture from 1.1 and real `Const_1GaussModel` / `Const_2GaussModel` instances so that the lmfit path is exercised without mocking.
 
@@ -483,56 +483,103 @@ That leaves two procedures with testable logic:
 - Multiple models, `interactively_choose_fits=False` → `final_choices` is populated from `choose_model_aic`; `always_manually_choose` entries in `user_check` are `True`.
 - `always_manually_choose=[]` (empty) → `user_check` is entirely determined by `marginal_fits`.
 
-#### B. `analyze_outflow_extent` helpers (`tests/test_procedures_analyze_outflow_extent.py`)
+**Code-review bugs found, not yet fixed (fix tasks in §2.25 and §2.26):**
+- `np.isnan(snr_image[idx]) is True` uses Python identity comparison against the `True` singleton, but `np.isnan` returns `numpy.bool_` (not Python `bool`). `numpy.bool_(True) is True` evaluates to `False`, so the NaN gate never fires. NaN SNR pixels are incorrectly forwarded to fitting instead of returning `[None]`. (`test_snr_nan_returns_none_list`, `xfail strict`; fix in §2.25)
+- The chop-bandwidth retry path does not guard against `lmfit` returning `None` (all-masked chopped spectrum). After the retry, the code proceeds directly to `if f.success is False:`, raising `AttributeError: 'NoneType' object has no attribute 'success'`. The first call has this guard; the retry is missing it. (`test_first_model_fail_chop_true_retry_returns_none_on_masked_spectrum`, `xfail strict`; fix in §2.26)
+
+**Additional gaps found during code review and added as tests:**
+- SNR gate is strict less-than: a pixel with SNR exactly equal to the threshold proceeds to fitting. Test `test_snr_equal_to_threshold_proceeds_to_fitting` documents this boundary.
+- `lmfit` returning `None` (all-masked spectrum) on the first call → `[None]` via the existing guard.
+- Retry after chop where both original and chopped fits fail with `success=False` → `[None]`.
+- Different spatial indices produce independent results (`test_result_spaxel_index_applies_correctly`).
+- chop-bandwidth retry call count verified to be exactly 2.
+
+**Additional gaps found during fresh code review (3 new tests added, 1 cleanup):**
+- `auto_aic_choices` values verified: `(auto == 1).all()` when model 1 has better AIC (`test_auto_aic_choices_all_one_when_model_one_wins`).
+- `chosen_models.shape` verified in the multi-model case (`test_multiple_models_chosen_models_shape_matches_spatial`).
+- Model-2 selection path exercised: `aic2<<aic1` → `(auto == 2).all()` and `chosen_models` contains 2G objects from `fit_results[1]` (`test_auto_aic_chooses_model_two_when_significantly_better`; `tc.fit.marginal_fits` patched to isolate AIC path from mock `.params` requirement).
+- Cleaned up `is True or == True` pattern in `test_always_manually_choose_sets_user_check_true` → `assert user[(0, 0)]`.
+
+**Final state after fresh review:** 26 passed, 2 xfailed.
+
+#### B. `analyze_outflow_extent` helpers (`tests/test_procedures_analyze_outflow_extent.py`) ✅ (complete)
 
 All functions here are pure numpy; no mpdaf or matplotlib dependency.
 
-**`distance`**
+**`distance`** ✅ (implemented)
 - `distance(origin[0], origin[1], origin)` → `0.0`.
 - Known Pythagorean triple: `distance(3, 4, [0, 0])` → `5.0`.
 - Works element-wise on numpy arrays of the same shape.
 
-**`sort_data`**
+**`sort_data`** ✅ (implemented)
 - Unordered `x` → output `x` is monotonically increasing.
 - Masked array input: masked entries are removed (compressed) from both `x` and `data`.
 - `x` and `data` maintain the same correspondence after sorting.
 
-**`boxcar_average_1d`**
+**`boxcar_average_1d`** ✅ (implemented)
 - `width=1` → output equals input (identity).
-- `width=3` on a constant array → output equals input.
-- `width=3` on a step function: values at transition are averaged correctly.
+- `width=3` on a constant array → interior rows unchanged (edges are zero-padded by `np.convolve(mode='same')`).
+- `width=3` on a step function: interior transition value averaged correctly.
 - `axis=1` applies smoothing along columns rather than rows.
 
-**`row_max`**
+**`row_max`** ✅ (implemented)
 - Returns two arrays of equal length (one per row of input).
 - First returned array is `np.arange(0, n_rows)`.
 - Obvious outlier column (single row with a far-off peak) is masked after sigma clipping.
 - Values above/below `center_row` are replaced by their respective medians.
 
-**`compute_gal_center_row`**
+**`compute_gal_center_row`** ✅ (implemented)
 - Synthetic image with a horizontal bright stripe at a known row → returns that row index.
 - Noisy low-flux columns at image edges do not shift the result (the 1% flux threshold filters them).
 
-**`radius_at_fraction`**
-- `values=[50]` on a uniform array of length `n` → returned radius is approximately `x[n//2]`.
+**`radius_at_fraction`** ✅ (implemented)
+- `values=[50]` on a uniform array of length `n` → returned radius is the first x where cumsum strictly exceeds 50% of total (strict `>` comparison).
 - `values` given as percentages (>1) are divided by 100 before use.
 - `return_string=True` → returns a list of strings of the form `"r_50 = ..."`.
 - Scalar `values` (not a list) does not raise (wraps to array internally).
 
-**`calculate_contours`**
+**`calculate_contours`** ✅ (implemented)
 - Synthetic 5-row flux array with a known peak column per row → returned contour widths match the manually computed cumulative-sum half-widths.
-- A fully masked row produces a masked entry in the output (not a crash).
+- A fully masked row produces a masked entry in the output (not a crash). `np.array()` correctly propagates `np.ma.masked` constants from the Python list, creating a masked array before `.T` and `.astype(int)`.
 - `levels` are sorted ascending before processing regardless of input order.
+- Peak near right edge with spread flux (so the goal isn't met at count=0) → the expansion loop tries `this_row[max_col + count]` beyond the array bounds and raises `IndexError`. (`test_near_edge_peak_does_not_crash_or_wrap`, `xfail strict`; fix in §2.31)
 
-**`create_outflow_mask`**
+**`contours_to_arcsec`** ✅ (implemented)
+- Default arguments (center=0, scale=1) → output equals input.
+- Input array is not modified in-place (function copies before modifying).
+- Row channel (index 0) is reduced by `galaxy_center_row`; col channel (index 1) by `galaxy_center_col`.
+- `arcsec_to_pixel` multiplies the entire shifted array.
+
+**`create_outflow_mask`** ✅ (implemented)
 - All pixels outside the contour region are `True`; pixels inside are `False`.
 - `which_contour` selects the correct level from `contour_levels`.
 - A masked `center_col` entry → that row is left fully masked (`True`) rather than raising.
 
-**`extract_wcs` / `process_arcsecs` / `process_units`** (header parsing)
-- `extract_wcs`: finds the `"wcs_step: (0.2, 0.2)"` comment line and returns `(0.2, 0.2)`.
-- `process_arcsecs`: numeric input is passed through unchanged; `"header"` triggers `extract_wcs`; missing `"wcs_step"` line raises `ValueError`.
-- `process_units`: string `"header"` reads from `"units: erg/s/cm2/A"` comment line; explicit string is converted to an `astropy.units.Unit`.
+**`extract_wcs` / `process_arcsecs` / `process_units`** ✅ (implemented) (header parsing)
+- `extract_wcs`: the pipeline comment format is `"wcs_step: [dy dx]"` (square brackets, space-separated). The function strips the key, replaces spaces with commas, and `eval()`s the result to get a Python list `[dy, dx]`.
+- `process_arcsecs`: numeric input is passed through unchanged; `"header"`/`"auto"`/`None` triggers `extract_wcs`; missing `"wcs_step"` line raises `ValueError` (wraps `IndexError`). Non-scalar results (list/tuple) return only `[0]`.
+- `process_units`: string `"header"`/`"auto"`/`None` reads from `"units: <string>"` comment line; explicit string is converted to `astropy.units.Unit`; an already-Unit object is returned unchanged.
+
+**Code-review bugs found (fix tasks in §2.27, §2.28, §2.29, §2.30, §2.31):**
+- `sort_data` is annotated `# ## ASSUMES SAME MASK` but does not enforce it. When `x` and `data` have *different* masks, `np.ma.compressed(x)` and `np.ma.compressed(data)` produce arrays of different lengths. The sort indices computed on the shorter array are silently applied to `data`, truncating or misaligning values without raising. (`test_mismatched_masks_raises_not_silent_corruption`, `xfail strict`; fix in §2.27)
+- `row_max` filters raw `argmax` results with `rowmax[rowmax > 0]` to exclude masked-row artefacts (which `argmax` defaults to 0). This also silently excludes genuine peaks at column 0 from the mean/std calculation used for sigma-clipping, biasing outlier detection. When *all* rows peak at column 0 the filtered array is empty, `mean()` and `std()` produce NaN, and the function emits `RuntimeWarning: Mean of empty slice` before proceeding with NaN-contaminated logic. (`test_genuine_peak_at_column_zero_not_excluded_from_stats`, `xfail strict`; fix in §2.28)
+- `radius_at_fraction` collects hit indices into `results` inside a loop and calls `np.column_stack([values, x[results]])` at the end. If the cumulative sum of `y` never reaches a goal (e.g. a fraction > 1.0 is requested, or y sums to zero), the loop ends before all goals are satisfied, `len(results) < len(values)`, and `column_stack` raises `ValueError`. (`test_unreachable_fraction_does_not_crash`, `xfail strict`; fix in §2.29)
+- `create_outflow_mask` finds `which_contour` with a `for` loop + `break`; if `which_contour` is not in `contour_levels`, `idx` is never set. The next line `col_span = line[2 + idx]` raises `UnboundLocalError` instead of a descriptive `ValueError`. (`test_unknown_which_contour_raises_not_silent`, `xfail strict`; fix in §2.30)
+- `calculate_contours` expands outward symmetrically with `this_row[max_col - count]` and `this_row[max_col + count]`. When the peak is near the right edge, `max_col + count` exceeds the array length and raises `IndexError`. When near the left edge, `max_col - count < 0` silently wraps (Python negative indexing) and adds flux from the wrong end. (`test_near_edge_peak_does_not_crash_or_wrap`, `xfail strict`; fix in §2.31)
+
+**Additional gaps found during code review and added as tests:**
+- `boxcar_average_1d` edge behavior documented: `mode='same'` zero-pads the boundary, so the first and last entries are lower than the constant value; interior rows are unchanged (test renamed to `test_width_three_constant_interior_unchanged`).
+- `distance` called with masked array inputs (production usage): mask propagates correctly to output (`test_masked_array_inputs_propagate_mask`).
+- `radius_at_fraction`: 50% goal uses strict `>`, so the radius is the x value at the first index where cumsum *exceeds* the goal — documented and corrected from the off-by-one initial assumption.
+- `radius_at_fraction`: `return_array.shape == (n_values, 2)` verified; first column contains the fractional values.
+- `compute_gal_center_row`: return type is `int` (explicit `int(...)` cast).
+- `extract_wcs`: ROADMAP spec had wrong format. Actual pipeline comment is `"wcs_step: [dy dx]"` (brackets, space-separated); the function does `.replace(" ", ",")` then `eval()` to get a Python list, not a tuple. Using `"wcs_step: (0.2, 0.2)"` (comma-space) would produce `"(0.2,,0.2)"` — a SyntaxError.
+- `extract_wcs` uses `eval()` on a string from file headers, which is a security concern if comment lines can be attacker-controlled. Design choice, not a crash bug; documented but not xfailed.
+- `process_units` raises raw `IndexError` for a missing `"units:"` line, while `process_arcsecs` wraps the equivalent `IndexError` in a `ValueError`. The inconsistency is noted.
+- `create_outflow_mask`: correctly handles masked `center_col` (skips row, left all-True). `np.ma.masked` in Python list → `np.array()` correctly creates a masked array (mask is not lost through `.T` and `.astype(int)`).
+- `contours_to_arcsec`: `count` reuse was initially a concern (the `count` variable in `calculate_contours` is not reset between level goals); verified that accumulation is intentional (each successive level goal is larger, so count only grows).
+
+**Current state:** 62 passed, 5 xfailed (§2.27, §2.28, §2.29, §2.30, §2.31). Phase 1.9B complete.
 
 ---
 
@@ -575,6 +622,31 @@ In `models/fast_models.py`:
 - `gaussian4CH_constrained_SII_d_DELTAX24 = -14.37` — add a comment with its origin (vacuum wavelength difference between [S II] λ6731 and λ6717 in Å).
 - `gaussian6CH_constrained_HaNII_d_DELTAX24 = -14.769` — similarly document Hα/[N II] separations.
 - Consider promoting these to named module-level constants with `ALL_CAPS` names and docstrings, rather than embedding them silently inside function defaults.
+
+### 2.27 — Fix `sort_data` silent data corruption on mismatched masks
+`sort_data(x, data)` is annotated `# ## ASSUMES SAME MASK` but does not enforce this precondition. When `x` and `data` have different masks, `np.ma.compressed` returns arrays of different lengths. The argsort indices from the shorter `x` array are applied to `data`, silently truncating or misaligning values with no error. In production, `x` and `data` are constructed from the same boolean mask so this is not triggered, but the lack of a guard makes the function unsafe to call in other contexts.
+- **Fix**: add `if ma.getmaskarray(x).shape != ma.getmaskarray(data).shape or not np.array_equal(ma.getmaskarray(x), ma.getmaskarray(data)): raise ValueError("x and data must share the same mask")` before the `compressed` calls, or derive a common mask via `ma.mask_or` and apply it to both before compressing.
+- (`test_mismatched_masks_raises_not_silent_corruption`, `xfail strict`)
+
+### 2.28 — Fix `row_max` column-0 peaks excluded from sigma-clip statistics
+`row_max` filters raw `argmax` results with `rowmax[rowmax > 0]` before computing the mean and std used for sigma-clipping. The intent is to exclude masked-row artefacts (for which `np.argmax` returns 0 by default), but the filter also silently excludes genuine peaks that sit at column 0, biasing the outlier detection threshold. When *all* row peaks are at column 0 the filtered array is empty: `mean()` and `std()` produce NaN and the function emits `RuntimeWarning: Mean of empty slice` before proceeding with NaN-contaminated logic, masking all or none of the rows unpredictably.
+- **Fix**: instead of filtering by value `> 0`, construct a proper masked array from the flux input and use `np.ma.compressed(rowmax)` on a version masked where the entire row is masked in the flux array (i.e. `rowmax = np.ma.masked_where(flux_masked_array.mask.all(axis=1), rowmax)`). This separates "row was entirely masked" (real artefact) from "row peaked at column 0" (valid data).
+- (`test_genuine_peak_at_column_zero_not_excluded_from_stats`, `xfail strict`)
+
+### 2.29 — Fix `radius_at_fraction` crash on unreachable cumulative fractions
+`radius_at_fraction` iterates over fraction goals and appends an index to `results` only when the cumulative sum of `y` first exceeds the goal. If a goal is never reached (e.g. a fraction > 1.0 is passed, or `y` sums to zero/NaN), the loop ends with `len(results) < len(values)`. The subsequent `np.column_stack([values, x[results]])` then raises `ValueError: all the input array dimensions except for the concatenation axis must match exactly`.
+- **Fix**: initialise `results` with `np.full(len(values), np.nan)` (float placeholder) and replace the append loop with indexed assignment; or after the loop check `len(results) == len(values)` and pad missing entries with `np.nan` before calling `column_stack`.
+- (`test_unreachable_fraction_does_not_crash`, `xfail strict`)
+
+### 2.30 — Fix `create_outflow_mask` UnboundLocalError on unknown `which_contour`
+`create_outflow_mask` searches for `which_contour` in `contour_levels` using a `for` loop with `break`, and stores the matching index in `idx`. If `which_contour` is not present in `contour_levels`, the loop completes without executing `break` and `idx` is never assigned. The next reference to `idx` in `col_span = line[2 + idx]` raises `UnboundLocalError: local variable 'idx' referenced before assignment` rather than a descriptive error.
+- **Fix**: replace the loop with `idx = list(contour_levels).index(which_contour)`, which naturally raises `ValueError: <value> is not in list` if the value is absent. Alternatively, add an `else` clause to the `for` loop or an explicit guard before the loop.
+- (`test_unknown_which_contour_raises_not_silent`, `xfail strict`)
+
+### 2.31 — Fix `calculate_contours` out-of-bounds expansion near array edges
+`calculate_contours` expands outward from the row's peak column with `this_row[max_col - count] + this_row[max_col + count]`. When the peak is near the **right** edge, `max_col + count` exceeds the array length and raises `IndexError`. When near the **left** edge, `max_col - count < 0` silently wraps via Python's negative-indexing convention and adds flux from the far end of the row, producing incorrect half-widths without any error.
+- **Fix**: before the expansion loop, clamp the accessible range to `[0, len(this_row) - 1]` and treat out-of-range positions as zero flux — e.g. use `np.pad(this_row.filled(0), max_col)` to create a symmetric window centred on `max_col`, or guard inside the loop with `count = min(count, max_col, len(this_row) - 1 - max_col)` before the index access.
+- (`test_near_edge_peak_does_not_crash_or_wrap`, `xfail strict`)
 
 ### 2.5 — Remove dead code
 - Large blocks of commented-out functions in `fit.py` (`compile_spaxel_info_mc`, `create_label_row_mc`, etc.) — delete them. They are in version control history if needed.
@@ -898,6 +970,52 @@ Alternatively, if sorting by height is not needed, make center-only sorting the 
 - `tests/test_lmfit_ext.py::TestOrderGauss::test_order_gauss_missing_height_param_does_not_crash` is `xfail(strict=True)` — currently raises `AttributeError`.
 
 Will turn green (xpass → pass) once the guard is added.
+
+### 2.25 — Fix `process_single_spectrum` NaN SNR gate
+
+In `fit_line.process_single_spectrum`:
+```python
+if (snr_image[idx] < snr_threshold) or (np.isnan(snr_image[idx]) is True):
+    return [None]
+```
+`snr_image[idx]` is a `numpy.float64` scalar. `np.isnan(numpy.float64(nan))` returns `numpy.bool_(True)`, not Python's `bool` singleton `True`. Therefore `numpy.bool_(True) is True` is `False` and the NaN gate never fires. By IEEE 754, `nan < threshold` also returns `False`. The net effect: NaN SNR pixels pass the gate unchanged and proceed to fitting.
+
+**Fix**: replace the `is True` identity check with a truthy check:
+```python
+if (snr_image[idx] < snr_threshold) or np.isnan(snr_image[idx]):
+    return [None]
+```
+
+**Tests**:
+- `tests/test_procedures_fit_line.py::TestProcessSingleSpectrum::test_snr_nan_returns_none_list` is `xfail(strict=True)`.
+
+Will turn green once the `is True` identity check is removed.
+
+### 2.26 — Fix missing `None` guard on chop-bandwidth retry in `process_single_spectrum`
+
+In `fit_line.process_single_spectrum`, a second `lmfit` call is made after chopping the spectrum by ±5 Å:
+```python
+cut_sp = sp.subspec(wave_range[0] + 5, wave_range[1] - 5)
+spec_to_fit = cut_sp
+f = spec_to_fit.lmfit(models[0], **s.lmfit_kwargs)
+if f.success is False:          # ← BUG: no guard if f is None
+    return [None]
+```
+The first `lmfit` call is guarded by `if f is None: return [None]`, but the retry is not.  If the chopped spectrum is entirely masked (e.g. all variance = 0 or the wave range collapses), `lmfit` returns `None` and the `f.success` access raises `AttributeError`.
+
+**Fix**: add the same guard after the retry call:
+```python
+f = spec_to_fit.lmfit(models[0], **s.lmfit_kwargs)
+if f is None:
+    return [None]
+if f.success is False:
+    return [None]
+```
+
+**Tests**:
+- `tests/test_procedures_fit_line.py::TestProcessSingleSpectrum::test_first_model_fail_chop_true_retry_returns_none_on_masked_spectrum` is `xfail(strict=True)`.
+
+Will turn green once the guard is added.
 
 ---
 
