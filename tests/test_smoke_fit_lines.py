@@ -713,6 +713,12 @@ class TestParallelRun:
 
     Skipped on Windows: fork context is not available there.  Once §6.3 is
     implemented (joblib backend), this skip can be removed.
+
+    Uses ``Const_1GaussModel_fast`` (not ``Const_1GaussModel``) because the
+    fast variant wraps a module-level numba function that is picklable, whereas
+    ``Const_1GaussModel`` embeds a local lambda inside ``ConstantModel.__init__``
+    that cannot cross the process boundary even with the ``fork`` start method
+    (results must be pickled on return from the worker).
     """
 
     @pytest.fixture(scope="class")
@@ -730,7 +736,7 @@ class TestParallelRun:
             lmfit_kwargs={"method": "least_squares"},
             snr_lower_limit=3,
             lines=[tc.lines.L_OIII5007],
-            models=[[tc.models.Const_1GaussModel()]],
+            models=[[tc.models.Const_1GaussModel_fast()]],
             d_aic=-150,
             interactively_choose_fits=False,
             always_manually_choose=[],

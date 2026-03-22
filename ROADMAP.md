@@ -281,7 +281,10 @@ Two test classes cover this:
   and asserts `fit_line.run()` raises `ValueError` containing `"parallel"`. Runs on all platforms.
 - **`TestParallelRun`** — exercises `parallel=True` end-to-end on the 3×3 subregion with
   `n_process=2`. Skipped on Windows (`sys.platform == "win32"`) until §6.3 (joblib migration) is
-  complete. Assertions:
+  complete. Uses `Const_1GaussModel_fast` (not `Const_1GaussModel`): even with the `fork` start
+  method, worker results must be pickled on return, and `ConstantModel` embeds a local lambda in
+  `__init__` that is not picklable. The fast variant wraps a module-level numba function and
+  round-trips cleanly. Assertions:
   - `model_results.shape == (1, 3, 3)` — spatial shape preserved after pool round-trip.
   - At least one spaxel is non-None.
   - All non-None `g1_center` values are within 0.5 Å of the injected line centre — the primary
@@ -1189,9 +1192,11 @@ The current parallel path uses `multiprocessing` directly. Replace it with `jobl
 - **Better error propagation**: exceptions raised in worker processes are re-raised in the main process with the original traceback, unlike the current code where worker exceptions are silently swallowed.
 - **Backend flexibility**: `joblib` supports `loky` (default, robust), `threading`, and `multiprocessing` backends. Switching backend for profiling or debugging requires only one keyword change.
 - **Automatic `chunksize` heuristics**: joblib batches tasks adaptively, so small cubes don't pay full parallelisation overhead.
+- **Pickling non-fast models**: `joblib`'s `loky` backend uses `cloudpickle` for serialisation end-to-end (both sending tasks to workers and receiving results back). cloudpickle can handle closures and lambdas that standard `pickle` cannot, so `Const_1GaussModel`, `Const_2GaussModel`, and all other composite models will work with `parallel=True` after this migration without any restriction to `_fast` variants.
 - Add `joblib` to `[project.dependencies]` in `pyproject.toml` and to the `[dev]` extras.
 - Replace the `n_process` multiprocessing pool calls in `fit_lines.py` with `Parallel(n_jobs=n_process)(delayed(fit_spaxel)(...) for ...)`.
 - The `n_process` user-facing setting name stays unchanged.
+- The `TestParallelRun` skip on Windows (§1.7f) can be removed once this is implemented.
 
 **Also parallelise the Monte Carlo loop**: the MC iterations are currently entirely sequential — two nested loops with no parallelism at all:
 1. In `fit_line.py`, the outer `for index, chosen_model in np.ndenumerate(chosen_models)` loop calls `chosen_model.mc_iter()` for each spaxel one at a time.
