@@ -21,7 +21,7 @@ classifiers = [
     "Operating System :: OS Independent"
 ]
 dependencies = [
-    "lmfit @ git+https://github.com/sebusch/light-lmfit-py.git@light_dev#egg=lmfit",
+    "lmfit >= 1.3.4",
     "matplotlib >= 3.4.3",
     "mpdaf >= 3.5",
     "numpy >= 1.17.0,<2",
@@ -52,11 +52,11 @@ dev = [
 
 [tool.pytest.ini_options]
 filterwarnings = [
-    # This lmfit fork evaluates constrained parameter expressions (e.g. GaussianModel's
+    # lmfit evaluates constrained parameter expressions (e.g. GaussianModel's
     # `height = amplitude / max(1e-15, sigma)`) via the `uncertainties` library.
     # `uncertainties` cannot propagate errors through `max()`, so it produces UFloat
-    # objects with std_dev=0 and emits this warning.  It is a known limitation of the
-    # lmfit fork, not actionable from test code.  Suppressed here to keep test output clean.
+    # objects with std_dev=0 and emits this warning.  It is a known limitation of
+    # lmfit/uncertainties, not actionable from test code.  Suppressed to keep output clean.
     "ignore:Using UFloat objects with std_dev==0:UserWarning",
 ]
 

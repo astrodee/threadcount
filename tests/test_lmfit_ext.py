@@ -439,3 +439,226 @@ class TestPlotComponentsSmoke:
         returned = _RESULT.plot_components(ax=existing_ax)
         assert returned is existing_ax
         plt.close("all")
+
+
+# ---------------------------------------------------------------------------
+# Numba setup_bounds patch (Phase 0b.1)
+# ---------------------------------------------------------------------------
+
+
+class TestNumbaKernels:
+    """0b.1 — JIT kernels match the analytic upstream formulas exactly.
+
+    Each kernel is a direct translation of the corresponding lambda in the
+    upstream lmfit Parameter.setup_bounds.  Testing against the analytic
+    formula (which is the same math, computed in plain Python) confirms the
+    njit compilation did not introduce any numerical difference.
+    """
+
+    def test_lower_bound_kernel_matches_formula(self):
+        """_from_internal_lower_bound(min, val) == min - 1 + sqrt(val^2 + 1)."""
+        from numpy import sqrt
+
+        from threadcount.lmfit_ext import _from_internal_lower_bound
+
+        for min_val, val in [(-5.0, 0.0), (2.0, 1.5), (0.0, -3.0), (1.0, 10.0)]:
+            expected = min_val - 1.0 + sqrt(val * val + 1)
+            assert _from_internal_lower_bound(min_val, val) == pytest.approx(expected)
+
+    def test_upper_bound_kernel_matches_formula(self):
+        """_from_internal_upper_bound(max, val) == max + 1 - sqrt(val^2 + 1)."""
+        from numpy import sqrt
+
+        from threadcount.lmfit_ext import _from_internal_upper_bound
+
+        for max_val, val in [(5.0, 0.0), (-2.0, 1.5), (10.0, -3.0), (0.0, 2.0)]:
+            expected = max_val + 1 - sqrt(val * val + 1)
+            assert _from_internal_upper_bound(max_val, val) == pytest.approx(expected)
+
+    def test_two_sided_kernel_matches_formula(self):
+        """_from_internal_bound2(min, max, val) == min + (sin(val)+1)*(max-min)/2."""
+        from numpy import sin
+
+        from threadcount.lmfit_ext import _from_internal_bound2
+
+        for min_val, max_val, val in [
+            (0.0, 1.0, 0.0),
+            (-1.0, 1.0, 1.5),
+            (2.0, 8.0, -0.7),
+        ]:
+            expected = min_val + (sin(val) + 1) * (max_val - min_val) / 2.0
+            assert _from_internal_bound2(min_val, max_val, val) == pytest.approx(
+                expected
+            )
+
+
+class TestNumbaMatchesLmfit:
+    """0b.1 — our patch produces from_internal identical to the real lmfit.
+
+    For each bound case we run two branches on the same Parameter value:
+      - branch A: _original_setup_bounds  (lmfit's own code, saved before
+                  extend_lmfit replaced it)
+      - branch B: _numba_setup_bounds     (our JIT patch)
+
+    We compare from_internal at a grid of internal values, so any formula
+    divergence is caught regardless of self-consistency within either branch.
+    """
+
+    # internal values to probe for each bound case
+    _PROBE_VALS = [-10.0, -1.0, -0.001, 0.0, 0.001, 1.0, 10.0]
+
+    def _run_both(self, value, min=-np.inf, max=np.inf):
+        """Return (from_internal_orig, from_internal_numba) callables for a param."""
+        from threadcount.lmfit_ext import _numba_setup_bounds, _original_setup_bounds
+
+        p_orig = lmfit.Parameter(name="x", value=value, min=min, max=max)
+        _original_setup_bounds(p_orig)
+
+        p_numba = lmfit.Parameter(name="x", value=value, min=min, max=max)
+        _numba_setup_bounds(p_numba)
+
+        return p_orig.from_internal, p_numba.from_internal
+
+    def test_unbounded_from_internal_matches(self):
+        """Unbounded: our from_internal == lmfit's at all probe values."""
+        fi_orig, fi_numba = self._run_both(3.7)
+        for v in self._PROBE_VALS:
+            assert fi_numba(v) == pytest.approx(fi_orig(v), rel=1e-12), (
+                f"unbounded mismatch at v={v}: numba={fi_numba(v)} orig={fi_orig(v)}"
+            )
+
+    def test_lower_bound_only_from_internal_matches(self):
+        """Only min set: our from_internal == lmfit's at all probe values."""
+        fi_orig, fi_numba = self._run_both(5.0, min=2.0)
+        for v in self._PROBE_VALS:
+            assert fi_numba(v) == pytest.approx(fi_orig(v), rel=1e-12), (
+                f"lower-bound mismatch at v={v}: numba={fi_numba(v)} orig={fi_orig(v)}"
+            )
+
+    def test_upper_bound_only_from_internal_matches(self):
+        """Only max set: our from_internal == lmfit's at all probe values."""
+        fi_orig, fi_numba = self._run_both(-1.0, max=3.0)
+        for v in self._PROBE_VALS:
+            assert fi_numba(v) == pytest.approx(fi_orig(v), rel=1e-12), (
+                f"upper-bound mismatch at v={v}: numba={fi_numba(v)} orig={fi_orig(v)}"
+            )
+
+    def test_two_sided_from_internal_matches(self):
+        """Both bounds set: our from_internal == lmfit's at all probe values."""
+        fi_orig, fi_numba = self._run_both(0.3, min=0.0, max=1.0)
+        for v in self._PROBE_VALS:
+            assert fi_numba(v) == pytest.approx(fi_orig(v), rel=1e-12), (
+                f"two-sided mismatch at v={v}: numba={fi_numba(v)} orig={fi_orig(v)}"
+            )
+
+    def test_setup_bounds_return_value_matches(self):
+        """The internal value returned by setup_bounds itself must also match."""
+        from threadcount.lmfit_ext import _numba_setup_bounds, _original_setup_bounds
+
+        cases = [
+            dict(value=3.7),
+            dict(value=5.0, min=2.0),
+            dict(value=-1.0, max=3.0),
+            dict(value=0.3, min=0.0, max=1.0),
+        ]
+        for kwargs in cases:
+            p_orig = lmfit.Parameter(name="x", **kwargs)
+            p_numba = lmfit.Parameter(name="x", **kwargs)
+            iv_orig = _original_setup_bounds(p_orig)
+            iv_numba = _numba_setup_bounds(p_numba)
+            assert iv_numba == pytest.approx(iv_orig, rel=1e-12, abs=1e-15), (
+                f"setup_bounds return mismatch for {kwargs}: "
+                f"numba={iv_numba} orig={iv_orig}"
+            )
+
+
+class TestNumbaSetupBounds:
+    """0b.1 — _numba_setup_bounds: self-consistent round-trips for all four bound cases.
+
+    Verifies that from_internal is a right-inverse of the internal value
+    returned by setup_bounds (i.e. the transform is invertible).  These tests
+    do NOT verify correctness against lmfit — that is done by TestNumbaMatchesLmfit.
+    """
+
+    def _make_param(self, value, min=-np.inf, max=np.inf):
+        p = lmfit.Parameter(name="x", value=value, min=min, max=max)
+        return p
+
+    def test_unbounded_from_internal_is_identity(self):
+        """No bounds: from_internal(v) == float(v)."""
+        p = self._make_param(3.7)
+        p.setup_bounds()
+        assert p.from_internal(3.7) == pytest.approx(3.7)
+        assert p.from_internal(-100.0) == pytest.approx(-100.0)
+
+    def test_lower_bound_only_round_trip(self):
+        """Only min set: round-trip from_internal(setup_bounds()) recovers value."""
+        value = 5.0
+        p = self._make_param(value, min=2.0)
+        internal = p.setup_bounds()
+        recovered = p.from_internal(internal)
+        assert recovered == pytest.approx(value, rel=1e-10)
+
+    def test_upper_bound_only_round_trip(self):
+        """Only max set: round-trip recovers value."""
+        value = -1.0
+        p = self._make_param(value, max=3.0)
+        internal = p.setup_bounds()
+        recovered = p.from_internal(internal)
+        assert recovered == pytest.approx(value, rel=1e-10)
+
+    def test_two_sided_bound_round_trip(self):
+        """Both min and max set: round-trip recovers value."""
+        value = 0.3
+        p = self._make_param(value, min=0.0, max=1.0)
+        internal = p.setup_bounds()
+        recovered = p.from_internal(internal)
+        assert recovered == pytest.approx(value, rel=1e-10)
+
+    def test_value_at_lower_bound_edge(self):
+        """Value exactly at min: round-trip still works."""
+        value = 2.0
+        p = self._make_param(value, min=2.0)
+        internal = p.setup_bounds()
+        recovered = p.from_internal(internal)
+        assert recovered == pytest.approx(value, rel=1e-9)
+
+    def test_value_at_midpoint_two_sided(self):
+        """Value at midpoint of two-sided range recovers correctly."""
+        value = 0.5
+        p = self._make_param(value, min=0.0, max=1.0)
+        internal = p.setup_bounds()
+        recovered = p.from_internal(internal)
+        assert recovered == pytest.approx(value, rel=1e-10)
+
+
+class TestNumbaSetupBoundsIntegration:
+    """0b.1 — bounded fit still converges with the monkey-patched setup_bounds.
+
+    Uses a 1-gaussian model with tight bounds on sigma to confirm that the
+    optimizer successfully navigates the Minuit-style transformed space under
+    the numba JIT patch.
+    """
+
+    def test_bounded_fit_converges_and_recovers_parameters(self):
+        """Fit with bounded sigma converges; recovered params within 1% of truth."""
+        model = tc.models.Const_1GaussModel()
+        params = model.guess(_Y, x=_X)
+        # apply tight but valid bounds around the known sigma=1.0
+        params["g1_sigma"].min = 0.5
+        params["g1_sigma"].max = 3.0
+        params["g1_height"].min = 0.0
+        result = model.fit(_Y, params, x=_X, method="least_squares")
+        assert result.success
+        assert result.params["g1_center"].value == pytest.approx(5006.843, rel=0.01)
+        assert result.params["g1_sigma"].value == pytest.approx(1.0, rel=0.05)
+
+    def test_bounded_fit_respects_bounds(self):
+        """Fitted parameter values stay within specified bounds."""
+        model = tc.models.Const_1GaussModel()
+        params = model.guess(_Y, x=_X)
+        params["g1_sigma"].min = 0.5
+        params["g1_sigma"].max = 3.0
+        result = model.fit(_Y, params, x=_X, method="least_squares")
+        assert result.params["g1_sigma"].value >= 0.5
+        assert result.params["g1_sigma"].value <= 3.0
